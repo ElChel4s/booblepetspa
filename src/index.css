@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* ────────────────────────────────────────────────────────────
+   Tokens base del sistema de diseño
+   Los valores dinámicos se inyectan por ThemeContext vía style={}
+   en el nodo raíz de AppShell.
+──────────────────────────────────────────────────────────── */
+:root {
+  --bg: #F0F4F8;
+  --text: #0f172a;
+  --border: #0f172a;
+  --primary: #14b8a6;
+  --secondary: #fbbf24;
+  --shadow: #0f172a;
+  --card: #ffffff;
+}
+
+/* Reset mínimo */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg);
+  color: var(--text);
+  transition: background-color 0.5s, color 0.5s;
+}
+
+/* Previene scroll horizontal en mobile */
+#root {
+  min-height: 100svh;
+  overflow-x: hidden;
+}
