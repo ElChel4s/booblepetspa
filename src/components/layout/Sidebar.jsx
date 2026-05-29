@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { useAuth } from '../../store/AuthContext';
 import { useNavigation } from '../../store/NavigationContext';
 import {
@@ -7,12 +8,13 @@ import {
   BarChart3, Calendar,
   Activity, BookOpen, Droplets, Package, Wallet, Monitor, PawPrint, Scissors, History
 } from 'lucide-react';
+import { getDefaultModule } from '../../utils/rbac';
 
 // Mapa de ítems de nav: id = módulo al que navegan
 const NAV_BY_ROLE = {
   cliente: [
     { id: 'tienda', icon: <Home />, label: 'Tienda' },
-    { id: 'clients', icon: <PawPrint />, label: 'Mascotas' },
+    { id: 'mascotas', icon: <PawPrint />, label: 'Mascotas' },
     { id: 'reservar', icon: <Calendar />, label: 'Reservar' },
     { id: 'historial', icon: <BookOpen />, label: 'Historial' },
   ],
@@ -26,6 +28,7 @@ const NAV_BY_ROLE = {
     { id: 'reports', icon: <BarChart3 />, label: 'Inicio' },
     { id: 'users', icon: <Users />, label: 'Usuarios' },
     { id: 'agenda', icon: <Calendar />, label: 'Agenda' },
+    { id: 'grooming', icon: <Activity />, label: 'Grooming' },
     { id: 'services', icon: <Scissors />, label: 'Servicios' },
     { id: 'inventory', icon: <Package />, label: 'Inventario' },
     {id: 'finance', icon: <Wallet />, label: 'Finanzas' },
@@ -49,33 +52,38 @@ const Sidebar = ({ onOpenSettings }) => {
   const { activeModule, setActiveModule } = useNavigation();
   const navItems = NAV_BY_ROLE[rolActual] || NAV_BY_ROLE.cliente;
 
+  const isPopRole = rolActual === 'admin' || rolActual === 'recepcion';
+
   return (
     <aside className="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-50 flex-col items-center gap-5">
       {/* Logo condensado */}
-      <div
-        onClick={() => setActiveModule(rolActual === 'admin' ? 'reports' : rolActual === 'recepcion' ? 'agenda' : rolActual === 'groomer' ? 'turnos' : 'tienda')}
+      <button
+        onClick={() => setActiveModule(getDefaultModule(rolActual))}
         className="bg-black text-white p-4 rounded-[1.5rem] border-[4px] border-black shadow-[4px_4px_0px_0px_var(--primary)] mb-2 hover:rotate-12 transition-transform cursor-pointer active:scale-90"
+        aria-label="Ir al inicio"
       >
         <Zap size={24} className="fill-current" />
-      </div>
+      </button>
 
       {/* Nav Items */}
-      <nav className={`flex flex-col gap-4 relative ${rolActual === 'admin' || rolActual === 'recepcion' ? 'bg-black/10 p-2 rounded-[2rem]' : ''}`}>
+      <nav className={`flex flex-col gap-4 relative ${isPopRole ? 'bg-black/10 p-2 rounded-[2rem]' : ''}`}>
         {navItems.map((item, i) => {
           const isActive = activeModule === item.id;
+          let translateClass = '';
+          if (!isPopRole) {
+            translateClass = i % 2 === 0 ? 'translate-x-1.5' : '-translate-x-1.5';
+          }
           return (
             <div
               key={item.id}
-              className={`group relative transform transition-all duration-300 ${
-                !(rolActual === 'admin' || rolActual === 'recepcion') ? (i % 2 === 0 ? 'translate-x-1.5' : '-translate-x-1.5') : ''
-              } hover:translate-x-0`}
+              className={`group relative transform transition-all duration-300 ${translateClass} hover:translate-x-0`}
             >
               {/* Aura hover */}
               <div className="absolute inset-[-4px] bg-white/40 backdrop-blur-md -z-10 rounded-full border-2 border-white/80 opacity-0 group-hover:opacity-100 transition-all duration-500 scale-90 group-hover:scale-110 shadow-sm" />
 
               <button
                 onClick={() => {
-                  if (item.id === 'clients' || item.id === 'users') {
+                  if (item.id === 'users') {
                     setProfileMode(rolActual === 'admin' || rolActual === 'recepcion' ? 'directory' : 'self');
                   }
                   setActiveModule(item.id);
@@ -107,6 +115,10 @@ const Sidebar = ({ onOpenSettings }) => {
       </nav>
     </aside>
   );
+};
+
+Sidebar.propTypes = {
+  onOpenSettings: PropTypes.func,
 };
 
 export default Sidebar;

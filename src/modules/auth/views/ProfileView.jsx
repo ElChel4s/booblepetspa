@@ -65,15 +65,16 @@ const ProfileView = ({
   const [toggleStatusLoading, setToggleStatusLoading] = useState(false);
 
   let u = viewingProfileMode === 'personal' ? currentUser : selectedUser;
-  if (!u) u = users[0];
+  if (!u) u = users?.[0];
 
   const [isEditing, setIsEditing] = useState(false);
   const canEdit = viewerRole === 'admin' || viewerRole === 'recepcion' || viewingProfileMode === 'personal';
   
   const [profileForm, setProfileForm] = useState({
     ...u,
-    especList: u.espec ? u.espec.split(',').map((s) => s.trim()) : [],
+    especList: u?.espec ? u.espec.split(',').map((s) => s.trim()) : [],
   });
+
   useEffect(() => {
     if (u) {
       setProfileForm({
@@ -152,6 +153,14 @@ const ProfileView = ({
     }
     setToggleStatusLoading(false);
   };
+
+  if (!u) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="text-sm font-black uppercase tracking-widest text-slate-400">Cargando perfil...</p>
+      </div>
+    );
+  }
 
   return (
     <>

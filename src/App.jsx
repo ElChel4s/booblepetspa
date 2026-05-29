@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { AuthProvider } from './store/AuthContext';
+import PropTypes from 'prop-types';
+import { AuthProvider, useAuth } from './store/AuthContext';
 import { ThemeProvider, useTheme } from './store/ThemeContext';
 import { NavigationProvider, useNavigation } from './store/NavigationContext';
-import { useAuth } from './store/AuthContext';
+import { ToastProvider } from './store/ToastContext';
+import { ReceptionAlertProvider } from './store/ReceptionAlertContext';
 
 import Header from './components/layout/Header';
-import Sidebar from './components/layout/Sidebar';
 import SettingsModal from './components/layout/SettingsModal';
-import BottomNav from './components/layout/BottomNav';
 import { DevToggle } from './components/DevToggle';
 import { Zap, AlertTriangle } from 'lucide-react';
 import AuthApp from './modules/auth/AuthApp';
@@ -15,17 +15,31 @@ import { IS_REAL_AUTH } from './config';
 import PlaceholderView from './components/common/PlaceholderView';
 import ResetPasswordFromEmail from './components/ResetPasswordFromEmail';
 import { supabase } from './api/supabase';
+import AdminLayout from './components/layout/roles/AdminLayout';
+import ReceptionLayout from './components/layout/roles/ReceptionLayout';
+import GroomerLayout from './components/layout/roles/GroomerLayout';
+import ClientLayout from './components/layout/roles/ClientLayout';
 
 // Módulos
+import AgendaModule from './modules/agenda/AgendaModule';
 import StoreView from './modules/inventory/views/StoreView';
 import AdminDashboardView from './modules/reports/views/AdminDashboardView';
 import ClientsModule from './modules/clients/ClientsModule';
+import ClientPetsView from './modules/clients/views/ClientPetsView';
 import AuditDashboardView from './modules/auth/views/AuditDashboardView';
 import ForcePasswordChangeModal from './modules/auth/components/ForcePasswordChangeModal';
+import ServicesModule from './modules/services/ServicesModule';
+import GroomingModule from './modules/grooming/GroomingModule';
 
 import './index.css';
 
 import { canAccess, getDefaultModule } from './utils/rbac';
+
+const buildAddToCartHandler = (setCount, setAdded) => (id) => {
+  setCount((prev) => prev + 1);
+  setAdded(id);
+  setTimeout(() => setAdded(null), 800);
+};
 
 // ─── Renderiza el módulo activo ───────────────────────────────────────────────
 const ModuleRenderer = ({ onAddToCart, isAdded }) => {
@@ -71,8 +85,29 @@ const ModuleRenderer = ({ onAddToCart, isAdded }) => {
     return <ClientsModule />;
   }
 
+  if (activeModule === 'mascotas') {
+    return <ClientPetsView />;
+  }
+
   if (activeModule === 'inventory') {
     return <StoreView onAddToCart={onAddToCart} isAdded={isAdded} />;
+  }
+
+  if (
+    activeModule === 'agenda' ||
+    activeModule === 'turnos' ||
+    activeModule === 'atencion' ||
+    activeModule === 'reservar'
+  ) {
+    return <AgendaModule />;
+  }
+
+  if (activeModule === 'services') {
+    return <ServicesModule />;
+  }
+
+  if (activeModule === 'grooming') {
+    return <GroomingModule />;
   }
 
   if (activeModule === 'reports') {
@@ -89,6 +124,11 @@ const ModuleRenderer = ({ onAddToCart, isAdded }) => {
   }
 
   return <StoreView onAddToCart={onAddToCart} isAdded={isAdded} />;
+};
+
+ModuleRenderer.propTypes = {
+  onAddToCart: PropTypes.func,
+  isAdded: PropTypes.any,
 };
 
 
@@ -110,7 +150,7 @@ const AppShell = () => {
     link.href = 'https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&display=swap';
     link.rel = 'stylesheet';
     document.head.appendChild(link);
-    return () => document.head.removeChild(link);
+    return () => link.remove();
   }, []);
 
   // El módulo activo se mantiene persistente gracias a NavigationContext
@@ -118,52 +158,48 @@ const AppShell = () => {
 
 
 
-  const handleAddToCart = (id) => {
-    setCartCount((prev) => prev + 1);
-    setIsAdded(id);
-    setTimeout(() => setIsAdded(null), 800);
+  const handleAddToCart = buildAddToCartHandler(setCartCount, setIsAdded);
+
+  let roleLabel = 'Cliente';
+  if (rolActual === 'admin') roleLabel = 'Admin';
+  if (rolActual === 'recepcion') roleLabel = 'Recepción';
+  if (rolActual === 'groomer') roleLabel = 'Groomer';
+
+  const roleLayouts = {
+    admin: AdminLayout,
+    recepcion: ReceptionLayout,
+    groomer: GroomerLayout,
+    cliente: ClientLayout,
   };
 
+  const ActiveLayout = roleLayouts[rolActual] || ClientLayout;
+
   return (
-    <div
-      style={themeVars}
-      className="min-h-screen bg-[var(--bg)] font-['Nunito',sans-serif] text-[var(--text)] flex flex-col md:flex-row relative overflow-hidden transition-colors duration-500"
-    >
-      {/* Fondo de puntos */}
-      <div
-        className="absolute inset-0 pointer-events-none z-0 opacity-10"
-        style={{
-          backgroundImage: 'radial-gradient(var(--border) 2px, transparent 2px)',
-          backgroundSize: '35px 35px',
-        }}
-      />
-
-      {/* Sidebar (desktop) */}
-      <Sidebar onOpenSettings={() => setIsSettingsOpen(true)} />
-
-      {/* Contenido principal */}
-      <main className="flex-1 flex flex-col w-full pb-32 md:pb-16 z-10 relative md:pl-40 md:px-12 md:pt-8 transition-all duration-500">
+    <>
+      <ActiveLayout themeVars={themeVars} onOpenSettings={() => setIsSettingsOpen(true)}>
         <Header
           cartCount={cartCount}
           favCount={favCount}
           notifCount={notifCount}
-          onOpenProfile={() => { openSelfProfile(); setActiveModule('clients'); }}
+          onOpenProfile={() => {
+            openSelfProfile();
+            const profileModule = rolActual === 'admin' || rolActual === 'recepcion' ? 'users' : 'clients';
+            setActiveModule(profileModule);
+          }}
           user={currentUser}
           petCount={petCount}
-          roleLabel={rolActual === 'admin' ? 'Admin' : rolActual === 'recepcion' ? 'Recepción' : rolActual === 'groomer' ? 'Groomer' : 'Cliente'}
+          roleLabel={roleLabel}
         />
 
         <div className="px-4 md:px-8">
           <ModuleRenderer onAddToCart={handleAddToCart} isAdded={isAdded} />
         </div>
-      </main>
+      </ActiveLayout>
 
-      {/* Modales y nav global */}
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
-      <BottomNav onOpenSettings={() => setIsSettingsOpen(true)} />
       <ForcePasswordChangeModal isOpen={mustChangePassword} />
       <DevToggle />
-    </div>
+    </>
   );
 };
 
@@ -226,11 +262,7 @@ const PublicShell = ({ onOpenAuth }) => {
   const [cartCount, setCartCount] = useState(0);
   const [isAdded, setIsAdded] = useState(null);
 
-  const handleAddToCart = (id) => {
-    setCartCount((prev) => prev + 1);
-    setIsAdded(id);
-    setTimeout(() => setIsAdded(null), 800);
-  };
+  const handleAddToCart = buildAddToCartHandler(setCartCount, setIsAdded);
 
   return (
     <div
@@ -262,15 +294,23 @@ const PublicShell = ({ onOpenAuth }) => {
   );
 };
 
+PublicShell.propTypes = {
+  onOpenAuth: PropTypes.func,
+};
+
 // ─── Root con providers ───────────────────────────────────────────────────────
 export default function App() {
   return (
     <AuthProvider>
-      <ThemeProvider>
-        <NavigationProvider>
-          <AuthGate />
-        </NavigationProvider>
-      </ThemeProvider>
+      <ReceptionAlertProvider>
+        <ThemeProvider>
+          <NavigationProvider>
+            <ToastProvider>
+              <AuthGate />
+            </ToastProvider>
+          </NavigationProvider>
+        </ThemeProvider>
+      </ReceptionAlertProvider>
     </AuthProvider>
   );
 }

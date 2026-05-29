@@ -1,4 +1,5 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { useAuth } from '../../store/AuthContext';
 import { useNavigation } from '../../store/NavigationContext';
 import {
@@ -10,7 +11,7 @@ import {
 const NAV_BY_ROLE = {
   cliente: [
     { id: 'tienda', icon: <Home />, label: 'Tienda' },
-    { id: 'clients', icon: <PawPrint />, label: 'Mascotas' },
+    { id: 'mascotas', icon: <PawPrint />, label: 'Mascotas' },
     { id: 'reservar', icon: <Calendar />, label: 'Reservar' },
     { id: 'historial', icon: <BookOpen />, label: 'Historial' },
   ],
@@ -24,6 +25,7 @@ const NAV_BY_ROLE = {
     { id: 'reports', icon: <BarChart3 />, label: 'Inicio' },
     { id: 'users', icon: <Users />, label: 'Usuarios' },
     { id: 'agenda', icon: <Calendar />, label: 'Agenda' },
+    { id: 'grooming', icon: <Activity />, label: 'Grooming' },
     { id: 'services', icon: <Scissors />, label: 'Servicios' },
     { id: 'inventory', icon: <Package />, label: 'Inventario' },
     { id: 'finance', icon: <Wallet />, label: 'Finanzas' },
@@ -37,10 +39,6 @@ const NAV_BY_ROLE = {
   ],
 };
 
-/**
- * BottomNav — Barra de navegación inferior para móvil (md:hidden).
- * Píldora flotante Neo-Brutalism. Usa NavigationContext para sincronía.
- */
 const BottomNav = ({ onOpenSettings }) => {
   const { rolActual, setProfileMode } = useAuth();
   const { activeModule, setActiveModule } = useNavigation();
@@ -55,7 +53,7 @@ const BottomNav = ({ onOpenSettings }) => {
             <button
               key={item.id}
               onClick={() => {
-                if (item.id === 'clients' || item.id === 'users') {
+                if (item.id === 'users') {
                   setProfileMode(rolActual === 'admin' || rolActual === 'recepcion' ? 'directory' : 'self');
                 }
                 setActiveModule(item.id);
@@ -91,6 +89,10 @@ const BottomNav = ({ onOpenSettings }) => {
       </div>
     </nav>
   );
+};
+
+BottomNav.propTypes = {
+  onOpenSettings: PropTypes.func,
 };
 
 export default BottomNav;
