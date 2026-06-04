@@ -9,7 +9,7 @@ import * as logsService from '../modules/auth/services/logsService';
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [rolActual, setRolActual] = useState('recepcion');
+  const [rolActual, setRolActual] = useState('cliente');
   const [isAuthenticated, setIsAuthenticated] = useState(!IS_REAL_AUTH);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(IS_REAL_AUTH);
@@ -22,8 +22,10 @@ export const AuthProvider = ({ children }) => {
       try {
         if (IS_REAL_AUTH) {
           const { user, error } = await authService.getCurrentUser();
+          console.log('[AuthContext] checkSession result:', { user, error });
           
           if (error || !user) {
+             console.error('[AuthContext] Session invalid or error occurred:', error);
              // Si hay un error de sesión (como 403), limpiamos el estado local
              if (error?.status === 403 || error?.message?.includes('403')) {
                 await authService.logout();
