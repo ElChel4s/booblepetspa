@@ -30,6 +30,7 @@ export const getClientAppointments = async (clientId) => {
       propuesta_mensaje,
       estado_propuesta,
       rechazo_mensaje,
+      reserva:reservas(estado_general),
       mascota:mascotas!inner(id, nombre, raza, foto_perfil_url, dueno_id),
       servicio:servicios(id, nombre, duracion_base_minutos, precio_base),
       groomer:perfiles!citas_groomer_id_fkey(id, nombre_completo, avatar_url)

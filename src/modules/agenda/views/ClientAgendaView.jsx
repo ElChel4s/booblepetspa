@@ -141,10 +141,22 @@ const ClientAgendaView = ({ activeTab }) => {
           return acc;
         }, {});
 
-        appointmentsList = appointmentsList.map((app) => ({
-          ...app,
-          modificadores_aplicados: modsByAppId[app.id] || [],
-        }));
+        appointmentsList = appointmentsList.map((app) => {
+          const reservaEstado = app.reserva?.estado_general;
+          let estado = app.estado;
+          if (estado === 'programada' && reservaEstado === 'confirmada') {
+            estado = 'confirmada';
+          }
+          if (estado === 'programada' && reservaEstado === 'cancelada') {
+            estado = 'cancelada';
+          }
+
+          return {
+            ...app,
+            estado,
+            modificadores_aplicados: modsByAppId[app.id] || [],
+          };
+        });
       }
 
       setPets(petsRes.data || []);
