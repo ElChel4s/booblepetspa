@@ -1,5 +1,6 @@
 import React from 'react';
 import { Star, Scissors } from 'lucide-react';
+import PwaInstallButton from '../../../components/common/PwaInstallButton';
 
 const AuthHero = () => (
   <div className="hidden lg:block relative">

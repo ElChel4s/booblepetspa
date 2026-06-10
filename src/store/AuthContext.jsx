@@ -62,14 +62,14 @@ export const AuthProvider = ({ children }) => {
                 // Forzar cambio de clave
                 setMustChangePassword(true);
                 setCurrentUser(user);
-                setIsAuthenticated(true);
                 setRolActual(user.rol || 'cliente');
+                setIsAuthenticated(true);
                 sessionsService.registerCurrentSession(user.id);
               }
             } else {
               setCurrentUser(user);
-              setIsAuthenticated(true);
               setRolActual(user.rol || 'cliente');
+              setIsAuthenticated(true);
               // Registrar sesión real en la DB
               sessionsService.registerCurrentSession(user.id);
             }
@@ -132,8 +132,11 @@ export const AuthProvider = ({ children }) => {
         return { user, mfaRequired: true };
       }
 
-      setIsAuthenticated(true);
+      // Limpiar módulo guardado para asegurar vista inicial por defecto
+      localStorage.removeItem(`activeModule:${user.rol || 'cliente'}`);
+      
       setRolActual(user.rol || 'cliente');
+      setIsAuthenticated(true);
     }
     return { user, error };
   };
@@ -156,8 +159,8 @@ export const AuthProvider = ({ children }) => {
       if (verifyError) throw verifyError;
 
       // 4. Si todo bien, ahora sí estamos autenticados al 100%
-      setIsAuthenticated(true);
       setRolActual(currentUser?.rol || 'cliente');
+      setIsAuthenticated(true);
       return { success: true };
     } catch (err) {
       console.error("[MFA Verify Error]:", err);
@@ -172,8 +175,9 @@ export const AuthProvider = ({ children }) => {
     }
     await authService.logout();
     setCurrentUser(null);
-    setIsAuthenticated(false);
     if (!IS_REAL_AUTH) setRolActual('recepcion');
+    else setRolActual('cliente');
+    setIsAuthenticated(false);
   };
 
   const updateProfile = async (updates, userId = null) => {

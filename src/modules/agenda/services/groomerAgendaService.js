@@ -241,7 +241,7 @@ export const withdrawInsumo = async (productoId, groomerId, citaId) => {
       producto_id: productoId,
       groomer_id: groomerId,
       cantidad: 1,
-      motivo: `Uso en cabina para cita ${citaId}`
+      motivo: `Apertura de insumo desde módulo de grooming`
     });
 
   if (insertError) return { error: insertError };
@@ -263,6 +263,18 @@ export const withdrawInsumo = async (productoId, groomerId, citaId) => {
     .from('productos')
     .update({ stock_actual: newStock })
     .eq('id', productoId);
+
+  // 4. Insertar en movimientos_inventario
+  if (!updateError) {
+    await supabase.from('movimientos_inventario').insert({
+      producto_id: productoId,
+      usuario_id: groomerId,
+      tipo: 'salida',
+      categoria_motivo: 'Uso Interno',
+      cantidad: 1,
+      detalle: `Apertura de insumo desde módulo de grooming (Cita: ${citaId})`
+    });
+  }
 
   return { error: updateError };
 };

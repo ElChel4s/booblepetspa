@@ -8,7 +8,6 @@ import {
   reassignCita,
   approveTriageAlert,
 } from '../services/groomingMonitorService';
-
 /**
  * Hook central del monitor de grooming.
  * Carga groomers, citas activas y completadas.
@@ -17,6 +16,14 @@ import {
 export const useGroomingMonitor = () => {
   const { showToast } = useToast();
 
+  const getLocalDateString = () => {
+    const d = new Date();
+    const offset = d.getTimezoneOffset();
+    const localDate = new Date(d.getTime() - (offset * 60 * 1000));
+    return localDate.toISOString().split('T')[0];
+  };
+
+  const [selectedDate, setSelectedDate] = useState(getLocalDateString());
   const [groomers, setGroomers] = useState([]);
   const [citas, setCitas] = useState([]);
   const [completedToday, setCompletedToday] = useState([]);
@@ -30,8 +37,8 @@ export const useGroomingMonitor = () => {
     setLoading(true);
     const [groomersRes, citasRes, completedRes] = await Promise.all([
       getActiveGroomers(),
-      getActiveCitas(),
-      getCompletedTodayCitas(),
+      getActiveCitas(selectedDate),
+      getCompletedTodayCitas(selectedDate),
     ]);
 
     if (!groomersRes.error) setGroomers(groomersRes.data || []);
@@ -42,7 +49,7 @@ export const useGroomingMonitor = () => {
       showToast('Error al cargar datos del monitor', 'error');
     }
     setLoading(false);
-  }, []);
+  }, [selectedDate]);
 
   useEffect(() => {
     loadData();
@@ -82,7 +89,7 @@ export const useGroomingMonitor = () => {
   }, [loadData]);
 
   /** Aprueba un recargo de triage en la base de datos */
-  const approveAlert = useCallback(async (citaId, tipoAlert, precioSugerido) => {
+  const approveAlert = useCallback(async (citaId, tipoAlert, precioSugerido = 50) => {
     const { error } = await approveTriageAlert(citaId, tipoAlert, precioSugerido);
     if (error) {
       showToast('Error al aprobar el recargo: ' + error.message, 'error');
@@ -111,6 +118,8 @@ export const useGroomingMonitor = () => {
     closeFicha,
     handleDrop,
     approveAlert,
+    selectedDate,
+    setSelectedDate,
     refresh: loadData,
   };
 };

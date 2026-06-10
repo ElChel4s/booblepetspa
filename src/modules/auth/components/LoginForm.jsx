@@ -6,6 +6,7 @@ import { useAuth } from '../../../store/AuthContext';
 import { signInWithGoogle } from '../services/authService';
 import InactiveAccountModal from './InactiveAccountModal';
 import { supabase } from '../../../api/supabase';
+import PwaInstallButton from '../../../components/common/PwaInstallButton';
 
 const LoginForm = ({ setView }) => {
   const { login } = useAuth();
@@ -71,7 +72,11 @@ const LoginForm = ({ setView }) => {
     <div className="w-full max-w-md mx-auto">
       <div className="bg-white border-[5px] border-black p-10 rounded-[3.5rem] shadow-[15px_15px_0px_0px_black] relative">
         <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black text-white px-8 py-2 rounded-2xl font-black text-xs uppercase tracking-[0.3em] shadow-xl">Acceso Seguro</div>
-        <h2 className="text-4xl font-black uppercase italic mb-10 mt-6 text-center">¡Bienvenido!</h2>
+        <h2 className="text-4xl font-black uppercase italic mb-6 mt-6 text-center">¡Bienvenido!</h2>
+        
+        <div className="flex justify-center mb-8">
+          <PwaInstallButton />
+        </div>
 
         {error && (
           <div className="bg-rose-100 border-2 border-black p-3 rounded-2xl mb-6 text-[10px] font-black uppercase text-rose-600 text-center">

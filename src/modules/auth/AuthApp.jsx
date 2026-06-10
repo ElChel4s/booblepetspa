@@ -73,7 +73,9 @@ export default function AuthApp({ initialView = 'login' }) {
   };
 
   const handleAuthSuccess = () => {
-    setRolActual(viewerRole || rolActual);
+    if (!IS_REAL_AUTH) {
+      setRolActual(viewerRole || rolActual);
+    }
     setIsAuthenticated(true);
   };
 

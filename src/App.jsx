@@ -5,11 +5,13 @@ import { ThemeProvider, useTheme } from './store/ThemeContext';
 import { NavigationProvider, useNavigation } from './store/NavigationContext';
 import { ToastProvider } from './store/ToastContext';
 import { ReceptionAlertProvider } from './store/ReceptionAlertContext';
+import { NotificationProvider } from './store/NotificationContext';
 
 import Header from './components/layout/Header';
 import SettingsModal from './components/layout/SettingsModal';
 import { DevToggle } from './components/DevToggle';
-import { Zap, AlertTriangle } from 'lucide-react';
+import { Zap, AlertTriangle, Download } from 'lucide-react';
+import { usePwaInstall } from './hooks/usePwaInstall';
 import AuthApp from './modules/auth/AuthApp';
 import { IS_REAL_AUTH } from './config';
 import PlaceholderView from './components/common/PlaceholderView';
@@ -23,13 +25,19 @@ import ClientLayout from './components/layout/roles/ClientLayout';
 // Módulos
 import AgendaModule from './modules/agenda/AgendaModule';
 import StoreView from './modules/inventory/views/StoreView';
+import AdminInventoryView from './modules/inventory/views/AdminInventoryView';
+import ReceptionPosView from './modules/inventory/views/ReceptionPosView';
+import GroomerSuppliesView from './modules/inventory/views/GroomerSuppliesView';
 import AdminDashboardView from './modules/reports/views/AdminDashboardView';
 import ClientsModule from './modules/clients/ClientsModule';
 import ClientPetsView from './modules/clients/views/ClientPetsView';
+import ClientHistoryView from './modules/clients/views/ClientHistoryView';
 import AuditDashboardView from './modules/auth/views/AuditDashboardView';
 import ForcePasswordChangeModal from './modules/auth/components/ForcePasswordChangeModal';
 import ServicesModule from './modules/services/ServicesModule';
 import GroomingModule from './modules/grooming/GroomingModule';
+import CashierView from './modules/billing/views/CashierView';
+import FinanceDashboardView from './modules/billing/views/FinanceDashboardView';
 
 import './index.css';
 
@@ -71,13 +79,10 @@ const ModuleRenderer = ({ onAddToCart, isAdded }) => {
   const placeholders = {
     agenda: { title: 'Agenda', subtitle: 'Reservas y calendario operativo' },
     reservar: { title: 'Reservar', subtitle: 'Agenda tu cita de spa' },
-    historial: { title: 'Historial', subtitle: 'Fotos, notas y boletas' },
     turnos: { title: 'Mis Turnos', subtitle: 'Lista de pacientes del dia' },
     atencion: { title: 'En Atencion', subtitle: 'Checklist y ficha activa' },
-    insumos: { title: 'Insumos', subtitle: 'Control de shampoo y consumibles' },
     services: { title: 'Servicios', subtitle: 'Catalogo y precios' },
     finance: { title: 'Finanzas', subtitle: 'Ingresos, egresos y reportes' },
-    monitor: { title: 'Monitor', subtitle: 'Estado en tiempo real' },
     cash: { title: 'Caja', subtitle: 'Cobros y arqueos' },
   };
 
@@ -89,8 +94,22 @@ const ModuleRenderer = ({ onAddToCart, isAdded }) => {
     return <ClientPetsView />;
   }
 
+  if (activeModule === 'historial') {
+    return <ClientHistoryView />;
+  }
+
   if (activeModule === 'inventory') {
+    if (rolActual === 'admin') {
+      return <AdminInventoryView />;
+    }
+    if (rolActual === 'recepcion') {
+      return <ReceptionPosView />;
+    }
     return <StoreView onAddToCart={onAddToCart} isAdded={isAdded} />;
+  }
+
+  if (activeModule === 'insumos') {
+    return <GroomerSuppliesView />;
   }
 
   if (
@@ -118,6 +137,14 @@ const ModuleRenderer = ({ onAddToCart, isAdded }) => {
     return <AuditDashboardView setView={setActiveModule} />;
   }
 
+  if (activeModule === 'cash') {
+    return <CashierView />;
+  }
+
+  if (activeModule === 'finance') {
+    return <FinanceDashboardView />;
+  }
+
   if (placeholders[activeModule]) {
     const data = placeholders[activeModule];
     return <PlaceholderView title={data.title} subtitle={data.subtitle} />;
@@ -137,10 +164,11 @@ const AppShell = () => {
   const { themeVars } = useTheme();
   const { setActiveModule } = useNavigation();
   const { rolActual, currentUser, petCount, openSelfProfile, mustChangePassword } = useAuth();
+  const { isInstallable, installApp } = usePwaInstall();
+  const [showBanner, setShowBanner] = useState(true);
 
   const [cartCount, setCartCount] = useState(2);
   const [favCount] = useState(5);
-  const [notifCount] = useState(3);
   const [isAdded, setIsAdded] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -180,7 +208,6 @@ const AppShell = () => {
         <Header
           cartCount={cartCount}
           favCount={favCount}
-          notifCount={notifCount}
           onOpenProfile={() => {
             openSelfProfile();
             const profileModule = rolActual === 'admin' || rolActual === 'recepcion' ? 'users' : 'clients';
@@ -190,6 +217,26 @@ const AppShell = () => {
           petCount={petCount}
           roleLabel={roleLabel}
         />
+
+        {isInstallable && showBanner && (
+          <div className="mx-4 md:mx-8 mb-6 bg-amber-400 text-black p-4 rounded-3xl border-4 border-black shadow-[4px_4px_0px_0px_black] flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
+             <div className="flex items-center gap-3">
+                <Download size={28} strokeWidth={3} className="shrink-0" />
+                <div>
+                   <h4 className="font-black uppercase tracking-wider text-xs leading-none">Aplicación de Escritorio y Móvil</h4>
+                   <p className="text-[10px] font-bold opacity-80 leading-tight mt-1">Descarga Moopsic directamente en tu teléfono o PC para recibir notificaciones al instante.</p>
+                </div>
+             </div>
+             <div className="flex gap-2 w-full sm:w-auto shrink-0">
+               <button onClick={installApp} className="bg-black text-white px-5 py-2.5 rounded-xl font-black uppercase tracking-widest text-[10px] hover:scale-105 active:scale-95 transition-all w-full sm:w-auto shadow-[2px_2px_0px_0px_rgba(255,255,255,0.3)]">
+                 Instalar
+               </button>
+               <button onClick={() => setShowBanner(false)} className="bg-white hover:bg-slate-100 text-black px-4 py-2.5 rounded-xl font-black uppercase tracking-widest text-[10px] border-2 border-black transition-all">
+                 Cerrar
+               </button>
+             </div>
+          </div>
+        )}
 
         <div className="px-4 md:px-8">
           <ModuleRenderer onAddToCart={handleAddToCart} isAdded={isAdded} />
@@ -261,6 +308,7 @@ const PublicShell = ({ onOpenAuth }) => {
   const { themeVars } = useTheme();
   const [cartCount, setCartCount] = useState(0);
   const [isAdded, setIsAdded] = useState(null);
+  const { isInstallable, installApp } = usePwaInstall();
 
   const handleAddToCart = buildAddToCartHandler(setCartCount, setIsAdded);
 
@@ -278,10 +326,24 @@ const PublicShell = ({ onOpenAuth }) => {
       />
 
       <main className="flex-1 flex flex-col w-full z-10 relative px-4 md:px-12 md:pt-8 pb-24">
+        {isInstallable && (
+          <div className="bg-[var(--primary)] text-white p-4 rounded-3xl border-4 border-black shadow-[4px_4px_0px_0px_black] mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top-4">
+             <div className="flex items-center gap-3">
+                <Download size={32} className="shrink-0" />
+                <div>
+                   <h4 className="font-black uppercase tracking-wider text-sm leading-tight">¡Instala nuestra App!</h4>
+                   <p className="text-xs font-bold opacity-90 leading-tight mt-1">Accede rápido desde tu pantalla de inicio.</p>
+                </div>
+             </div>
+             <button onClick={installApp} className="bg-black text-white px-6 py-3 rounded-2xl font-black uppercase tracking-widest text-xs hover:scale-105 active:scale-95 transition-all w-full sm:w-auto shrink-0 shadow-[2px_2px_0px_0px_rgba(255,255,255,0.3)]">
+               Instalar
+             </button>
+          </div>
+        )}
+
         <Header
           cartCount={cartCount}
           favCount={0}
-          notifCount={0}
           onOpenAuth={() => onOpenAuth('login')}
           variant="public"
         />
@@ -306,7 +368,9 @@ export default function App() {
         <ThemeProvider>
           <NavigationProvider>
             <ToastProvider>
-              <AuthGate />
+              <NotificationProvider>
+                <AuthGate />
+              </NotificationProvider>
             </ToastProvider>
           </NavigationProvider>
         </ThemeProvider>

@@ -4,9 +4,9 @@ import { supabase } from '../../../api/supabase';
  * Citas activas (en_proceso / en_espera) con datos de mascota y groomer.
  * Tabla: citas JOIN mascotas JOIN perfiles (groomer)
  */
-export const getActiveCitas = async () => {
+export const getActiveCitas = async (date) => {
   if (!supabase) return { data: [], error: null };
-  return supabase
+  const query = supabase
     .from('citas')
     .select(`
       id,
@@ -30,8 +30,16 @@ export const getActiveCitas = async () => {
         )
       )
     `)
-    .in('estado', ['en_proceso', 'en_espera', 'programada'])
-    .order('fecha_hora_inicio', { ascending: true });
+    .in('estado', ['en_proceso', 'en_espera', 'programada']);
+
+  if (date) {
+    const dayStart = new Date(date + 'T00:00:00');
+    const dayEnd = new Date(date + 'T23:59:59.999');
+    query.gte('fecha_hora_inicio', dayStart.toISOString())
+         .lte('fecha_hora_inicio', dayEnd.toISOString());
+  }
+
+  return query.order('fecha_hora_inicio', { ascending: true });
 };
 
 /**
@@ -81,21 +89,28 @@ export const getFichaGrooming = async (citaId) => {
 /**
  * Citas completadas hoy para el panel de Control de Calidad.
  */
-export const getCompletedTodayCitas = async () => {
+export const getCompletedTodayCitas = async (date) => {
   if (!supabase) return { data: [], error: null };
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  
+  const targetDate = date ? new Date(date + 'T00:00:00') : new Date();
+  const dayStart = new Date(targetDate);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(targetDate);
+  dayEnd.setHours(23, 59, 59, 999);
+
   return supabase
     .from('citas')
     .select(`
       id,
+      groomer_id,
       fecha_hora_inicio,
       fecha_hora_fin,
       mascota:mascotas(nombre, raza, foto_perfil_url),
       groomer:perfiles!citas_groomer_id_fkey(nombre_completo)
     `)
     .eq('estado', 'completada')
-    .gte('fecha_hora_fin', todayStart.toISOString())
+    .gte('fecha_hora_fin', dayStart.toISOString())
+    .lte('fecha_hora_fin', dayEnd.toISOString())
     .order('fecha_hora_fin', { ascending: false });
 };
 

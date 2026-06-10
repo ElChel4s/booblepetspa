@@ -163,6 +163,21 @@ const ServicesModule = () => {
     fetchServicesAndModifiers();
   }, []);
 
+  const handleSeedDB = async () => {
+    setLoading(true);
+    const servicios = [
+      { nombre: 'Baño Premium', precio_base: 15.00, duracion_base_minutos: 60, categoria: 'Baño', descripcion: 'Baño relajante con shampoo hipoalergénico.', icon_name: 'Scissors' },
+      { nombre: 'Corte de Raza', precio_base: 25.00, duracion_base_minutos: 90, categoria: 'Peluquería', descripcion: 'Corte especializado según la raza y estilo.', icon_name: 'Scissors' },
+      { nombre: 'Spa Completo', precio_base: 40.00, duracion_base_minutos: 120, categoria: 'Spa', descripcion: 'Baño, corte, uñas y limpieza profunda.', icon_name: 'Zap' },
+      { nombre: 'Limpieza Dental', precio_base: 10.00, duracion_base_minutos: 30, categoria: 'Higiene', descripcion: 'Cepillado dental.', icon_name: 'Zap' }
+    ];
+    for (const s of servicios) {
+      await createService(s, actor);
+    }
+    showFeedback('success', 'Datos de prueba generados correctamente');
+    await fetchServicesAndModifiers();
+  };
+
   const services = useMemo(() => {
     return dbServices.map((service) => ({
       id: service.id,
@@ -424,9 +439,16 @@ const ServicesModule = () => {
         <h2 className="text-4xl font-black italic uppercase tracking-tighter">
           Catálogo de <span className="text-[var(--primary)]">Servicios</span>
         </h2>
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
-          Gestiona los servicios base y las reglas dinámicas de tu spa
-        </p>
+        <div className="flex justify-between items-center">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+            Gestiona los servicios base y las reglas dinámicas de tu spa
+          </p>
+          {services.length === 0 && (
+            <button onClick={handleSeedDB} className="bg-amber-100 text-amber-700 px-3 py-1 rounded-lg text-xs font-bold border-2 border-amber-300 hover:bg-amber-200 transition-colors">
+              Cargar Datos de Prueba
+            </button>
+          )}
+        </div>
       </div>
 
       {loading && (

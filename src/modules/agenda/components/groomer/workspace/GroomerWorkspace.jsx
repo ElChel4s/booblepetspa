@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import PropTypes from 'prop-types';
-import { Play, Pause, Box, AlertTriangle, Sparkles, X } from 'lucide-react';
+import { Play, Pause, Box, AlertTriangle, Sparkles, X, Package } from 'lucide-react';
 import { useToast } from '../../../../../store/ToastContext';
 import { supabase } from '../../../../../api/supabase';
 
@@ -59,6 +59,7 @@ export default function GroomerWorkspace({
   const [insumosList, setInsumosList] = useState([]);
   const [loadingInsumos, setLoadingInsumos] = useState(false);
   const [localSaving, setLocalSaving] = useState(false);
+  const [sessionInsumos, setSessionInsumos] = useState([]);
 
   const saving = localSaving || savingParent;
 
@@ -237,13 +238,19 @@ export default function GroomerWorkspace({
     if (error) {
       showToast('Error al registrar retiro de insumo', 'error');
     } else {
-      showToast(`1 unidad de ${insumo.nombre} retirada de cabina`, 'success');
+      showToast(`📦 Insumo Registrado: -1 ${insumo.nombre} en Almacén Global`, 'success');
       // Decrementar stock localmente
       setInsumosList((prev) =>
         prev.map((item) =>
           item.id === insumo.id ? { ...item, stock_actual: Math.max(0, item.stock_actual - 1) } : item
         )
       );
+      // Actualizar sesión
+      setSessionInsumos((prev) => {
+         const existing = prev.find(p => p.id === insumo.id);
+         if (existing) return prev.map(p => p.id === insumo.id ? { ...p, qty: p.qty + 1 } : p);
+         return [...prev, { id: insumo.id, nombre: insumo.nombre, qty: 1 }];
+      });
     }
     setLocalSaving(false);
   };
@@ -404,14 +411,31 @@ export default function GroomerWorkspace({
             saving={saving}
           />
 
-          {/* Botón de Insumos Flotante */}
-          <div className="mt-4">
+          {/* Sección de Insumos */}
+          <div className="mt-4 bg-white border-[4px] border-black rounded-[2rem] p-5 shadow-[6px_6px_0px_0px_black] space-y-4">
+            <h4 className="font-black text-lg uppercase flex items-center gap-2">
+              <Package size={20} className="text-[var(--primary)]" /> Insumos en uso de estación
+            </h4>
+            
+            {sessionInsumos.length > 0 ? (
+              <div className="space-y-2">
+                {sessionInsumos.map((ins) => (
+                  <div key={ins.id} className="text-sm font-bold uppercase bg-slate-50 border-2 border-black p-2 rounded-xl flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 border border-black shrink-0" />
+                    En uso: {ins.qty}x {ins.nombre}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs font-bold text-slate-400 uppercase">Aún no has abierto insumos nuevos en este turno.</p>
+            )}
+
             <button
               type="button"
               onClick={handleOpenInsumos}
-              className="w-full px-4 py-3 bg-blue-200 text-blue-900 border-[3px] border-black rounded-2xl font-black uppercase text-sm tracking-wider shadow-[4px_4px_0px_0px_black] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2 hover:bg-blue-300 cursor-pointer"
+              className="w-full mt-2 py-3 bg-[var(--primary)] text-white border-[3px] border-black rounded-xl font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_black] active:translate-y-1 active:shadow-none hover:-translate-y-0.5 hover:shadow-[6px_6px_0px_0px_black] transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Box size={20} /> Abrir Insumo en Estación
+              🍾 Abrir Nuevo Bote
             </button>
           </div>
         </div>

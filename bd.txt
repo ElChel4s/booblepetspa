@@ -1,52 +1,38 @@
 -- WARNING: This schema is for context only and is not meant to be run.
 -- Table order and constraints may not be valid for execution.
 
+CREATE TABLE public.perfiles (
+  id uuid NOT NULL,
+  nombre_completo text,
+  rol text CHECK (rol = ANY (ARRAY['admin'::text, 'recepcion'::text, 'groomer'::text, 'cliente'::text])),
+  telefono text,
+  avatar_url text,
+  updated_at timestamp with time zone DEFAULT now(),
+  email text,
+  mfa_activado boolean DEFAULT false,
+  activo boolean DEFAULT true,
+  CONSTRAINT perfiles_pkey PRIMARY KEY (id),
+  CONSTRAINT perfiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.servicios (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  nombre text NOT NULL,
+  descripcion text,
+  duracion_base_minutos integer NOT NULL,
+  precio_base numeric NOT NULL,
+  categoria text,
+  icon_name text DEFAULT 'Scissors'::text,
+  CONSTRAINT servicios_pkey PRIMARY KEY (id)
+);
 CREATE TABLE public.categorias_productos (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   nombre text NOT NULL,
   CONSTRAINT categorias_productos_pkey PRIMARY KEY (id)
 );
-CREATE TABLE public.checklist_seguimiento (
+CREATE TABLE public.tareas_disponibles (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  ficha_id uuid,
-  tarea_id uuid,
-  completado boolean DEFAULT false,
-  observacion_item text,
-  CONSTRAINT checklist_seguimiento_pkey PRIMARY KEY (id),
-  CONSTRAINT checklist_seguimiento_ficha_id_fkey FOREIGN KEY (ficha_id) REFERENCES public.fichas_grooming(id),
-  CONSTRAINT checklist_seguimiento_tarea_id_fkey FOREIGN KEY (tarea_id) REFERENCES public.tareas_disponibles(id)
-);
-CREATE TABLE public.cita_modificadores_aplicados (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  cita_id uuid,
-  modificador_id uuid,
-  precio_aplicado numeric,
-  concepto_snap text,
-  estado_aprobacion text DEFAULT 'pendiente'::text CHECK (estado_aprobacion = ANY (ARRAY['pendiente'::text, 'aprobado'::text, 'rechazado'::text])),
-  url_evidencia text,
-  CONSTRAINT cita_modificadores_aplicados_pkey PRIMARY KEY (id),
-  CONSTRAINT cita_modificadores_aplicados_cita_id_fkey FOREIGN KEY (cita_id) REFERENCES public.citas(id),
-  CONSTRAINT cita_modificadores_aplicados_modificador_id_fkey FOREIGN KEY (modificador_id) REFERENCES public.modificadores_servicio(id)
-);
-CREATE TABLE public.citas (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  reserva_id uuid,
-  mascota_id uuid,
-  groomer_id uuid,
-  servicio_id uuid,
-  fecha_hora_inicio timestamp with time zone NOT NULL,
-  fecha_hora_fin timestamp with time zone NOT NULL,
-  estado text DEFAULT 'programada'::text CHECK (estado = ANY (ARRAY['programada'::text, 'en_espera'::text, 'en_proceso'::text, 'pausada'::text, 'completada'::text, 'cancelada'::text, 'no_show'::text])),
-  notas_cliente text,
-  sugerencia_groomer_id uuid,
-  propuesta_mensaje text,
-  estado_propuesta text DEFAULT 'ninguna'::text CHECK (estado_propuesta = ANY (ARRAY['ninguna'::text, 'pendiente'::text, 'aceptada'::text, 'rechazada'::text])),
-  CONSTRAINT citas_pkey PRIMARY KEY (id),
-  CONSTRAINT citas_sugerencia_groomer_id_fkey FOREIGN KEY (sugerencia_groomer_id) REFERENCES public.perfiles(id),
-  CONSTRAINT citas_reserva_id_fkey FOREIGN KEY (reserva_id) REFERENCES public.reservas(id),
-  CONSTRAINT citas_mascota_id_fkey FOREIGN KEY (mascota_id) REFERENCES public.mascotas(id),
-  CONSTRAINT citas_groomer_id_fkey FOREIGN KEY (groomer_id) REFERENCES public.perfiles(id),
-  CONSTRAINT citas_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicios(id)
+  nombre text NOT NULL,
+  CONSTRAINT tareas_disponibles_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.datos_clientes (
   perfil_id uuid NOT NULL,
@@ -64,61 +50,111 @@ CREATE TABLE public.datos_groomers (
   CONSTRAINT datos_groomers_pkey PRIMARY KEY (perfil_id),
   CONSTRAINT datos_groomers_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
 );
-CREATE TABLE public.detalle_pedidos (
+CREATE TABLE public.modificadores_servicio (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  pedido_id uuid,
-  producto_id uuid,
-  cantidad integer NOT NULL,
-  precio_unitario_snap numeric NOT NULL,
-  CONSTRAINT detalle_pedidos_pkey PRIMARY KEY (id),
-  CONSTRAINT detalle_pedidos_pedido_id_fkey FOREIGN KEY (pedido_id) REFERENCES public.pedidos(id),
-  CONSTRAINT detalle_pedidos_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id)
+  servicio_id uuid,
+  criterio text,
+  valor text,
+  tiempo_extra_minutos integer DEFAULT 0,
+  precio_adicional numeric DEFAULT 0,
+  precio_es_porcentaje boolean DEFAULT false,
+  tiempo_es_porcentaje boolean DEFAULT false,
+  icon_name text DEFAULT 'Zap'::text,
+  CONSTRAINT modificadores_servicio_pkey PRIMARY KEY (id),
+  CONSTRAINT modificadores_servicio_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicios(id)
 );
-CREATE TABLE public.encuestas_satisfaccion (
+CREATE TABLE public.horarios_base_groomer (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  cita_id uuid UNIQUE,
-  puntuacion_nps integer CHECK (puntuacion_nps >= 1 AND puntuacion_nps <= 10),
-  comentario text,
-  CONSTRAINT encuestas_satisfaccion_pkey PRIMARY KEY (id),
-  CONSTRAINT encuestas_satisfaccion_cita_id_fkey FOREIGN KEY (cita_id) REFERENCES public.citas(id)
-);
-CREATE TABLE public.excepciones_agenda (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['general'::text, 'staff'::text])),
   groomer_id uuid,
-  fecha_efectiva date NOT NULL,
-  todo_el_dia boolean DEFAULT true,
-  hora_inicio time without time zone,
-  hora_fin time without time zone,
-  motivo text NOT NULL,
-  detalle_opcional text,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT excepciones_agenda_pkey PRIMARY KEY (id),
-  CONSTRAINT excepciones_agenda_groomer_id_fkey FOREIGN KEY (groomer_id) REFERENCES public.perfiles(id)
+  dia_semana integer CHECK (dia_semana >= 0 AND dia_semana <= 6),
+  hora_inicio time without time zone NOT NULL,
+  hora_fin time without time zone NOT NULL,
+  CONSTRAINT horarios_base_groomer_pkey PRIMARY KEY (id),
+  CONSTRAINT horarios_base_groomer_groomer_id_fkey FOREIGN KEY (groomer_id) REFERENCES public.perfiles(id)
 );
-CREATE TABLE public.facturas (
+CREATE TABLE public.mascotas (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  dueno_id uuid,
+  nombre text NOT NULL,
+  especie text,
+  raza text,
+  tamano text,
+  temperamento text,
+  alergias text,
+  foto_perfil_url text,
+  CONSTRAINT mascotas_pkey PRIMARY KEY (id),
+  CONSTRAINT mascotas_dueno_id_fkey FOREIGN KEY (dueno_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.reservas (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   cliente_id uuid,
-  reserva_id uuid,
-  pedido_id uuid,
-  numero_factura integer NOT NULL DEFAULT nextval('facturas_numero_factura_seq'::regclass),
-  nit_ci text,
-  razon_social text,
-  monto_total numeric NOT NULL,
-  estado_factura text DEFAULT 'emitida'::text,
-  CONSTRAINT facturas_pkey PRIMARY KEY (id),
-  CONSTRAINT facturas_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.perfiles(id),
-  CONSTRAINT facturas_reserva_id_fkey FOREIGN KEY (reserva_id) REFERENCES public.reservas(id),
-  CONSTRAINT facturas_pedido_id_fkey FOREIGN KEY (pedido_id) REFERENCES public.pedidos(id)
+  fecha_creacion timestamp with time zone DEFAULT now(),
+  estado_general text DEFAULT 'pendiente'::text,
+  total_reserva numeric DEFAULT 0,
+  nombre_invitado text,
+  telefono_invitado text,
+  ci_invitado text,
+  origen text DEFAULT 'presencial'::text CHECK (origen = ANY (ARRAY['presencial'::text, 'web'::text, 'telefono'::text, 'whatsapp'::text])),
+  codigo_seguimiento text UNIQUE,
+  CONSTRAINT reservas_pkey PRIMARY KEY (id),
+  CONSTRAINT reservas_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.perfiles(id)
 );
-CREATE TABLE public.feed_eventos_cita (
+CREATE TABLE public.productos (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  cita_id uuid NOT NULL,
-  hora_evento time without time zone DEFAULT CURRENT_TIME,
-  descripcion text NOT NULL,
-  created_at timestamp with time zone DEFAULT now(),
-  CONSTRAINT feed_eventos_cita_pkey PRIMARY KEY (id),
-  CONSTRAINT feed_eventos_cita_cita_id_fkey FOREIGN KEY (cita_id) REFERENCES public.citas(id)
+  categoria_id uuid,
+  nombre text NOT NULL,
+  precio_base numeric NOT NULL,
+  stock_actual integer DEFAULT 0,
+  stock_minimo_alerta integer DEFAULT 5,
+  es_insumo boolean DEFAULT false,
+  descripcion text,
+  especie_destino text DEFAULT 'todos'::text CHECK (especie_destino = ANY (ARRAY['perro'::text, 'gato'::text, 'todos'::text])),
+  CONSTRAINT productos_pkey PRIMARY KEY (id),
+  CONSTRAINT productos_categoria_id_fkey FOREIGN KEY (categoria_id) REFERENCES public.categorias_productos(id)
+);
+CREATE TABLE public.citas (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  reserva_id uuid,
+  mascota_id uuid,
+  groomer_id uuid,
+  servicio_id uuid,
+  fecha_hora_inicio timestamp with time zone NOT NULL,
+  fecha_hora_fin timestamp with time zone NOT NULL,
+  estado text DEFAULT 'programada'::text CHECK (estado = ANY (ARRAY['programada'::text, 'en_espera'::text, 'en_proceso'::text, 'pausada'::text, 'completada'::text, 'cancelada'::text, 'no_show'::text])),
+  notas_cliente text,
+  sugerencia_groomer_id uuid,
+  propuesta_mensaje text,
+  estado_propuesta text DEFAULT 'ninguna'::text CHECK (estado_propuesta = ANY (ARRAY['ninguna'::text, 'pendiente'::text, 'aceptada'::text, 'rechazada'::text])),
+  sugerencia_fecha_hora_inicio timestamp with time zone,
+  sugerencia_fecha_hora_fin timestamp with time zone,
+  rechazo_mensaje text,
+  CONSTRAINT citas_pkey PRIMARY KEY (id),
+  CONSTRAINT citas_sugerencia_groomer_id_fkey FOREIGN KEY (sugerencia_groomer_id) REFERENCES public.perfiles(id),
+  CONSTRAINT citas_reserva_id_fkey FOREIGN KEY (reserva_id) REFERENCES public.reservas(id),
+  CONSTRAINT citas_mascota_id_fkey FOREIGN KEY (mascota_id) REFERENCES public.mascotas(id),
+  CONSTRAINT citas_groomer_id_fkey FOREIGN KEY (groomer_id) REFERENCES public.perfiles(id),
+  CONSTRAINT citas_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicios(id)
+);
+CREATE TABLE public.pedidos (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  cliente_id uuid,
+  monto_total numeric DEFAULT 0,
+  estado_pedido text DEFAULT 'pendiente'::text,
+  estado_pago text DEFAULT 'pendiente'::text,
+  codigo_seguimiento text UNIQUE,
+  CONSTRAINT pedidos_pkey PRIMARY KEY (id),
+  CONSTRAINT pedidos_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.retiros_insumo (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  producto_id uuid,
+  groomer_id uuid,
+  cantidad integer NOT NULL,
+  fecha_retiro timestamp with time zone DEFAULT now(),
+  motivo text,
+  CONSTRAINT retiros_insumo_pkey PRIMARY KEY (id),
+  CONSTRAINT retiros_insumo_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id),
+  CONSTRAINT retiros_insumo_groomer_id_fkey FOREIGN KEY (groomer_id) REFERENCES public.perfiles(id)
 );
 CREATE TABLE public.fichas_grooming (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -135,59 +171,42 @@ CREATE TABLE public.fichas_grooming (
   CONSTRAINT fichas_grooming_pkey PRIMARY KEY (id),
   CONSTRAINT fichas_grooming_cita_id_fkey FOREIGN KEY (cita_id) REFERENCES public.citas(id)
 );
-CREATE TABLE public.fotos_grooming (
+CREATE TABLE public.cita_modificadores_aplicados (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  ficha_id uuid,
-  url_foto text NOT NULL,
-  tipo_momento text CHECK (tipo_momento = ANY (ARRAY['antes'::text, 'durante'::text, 'despues'::text])),
-  CONSTRAINT fotos_grooming_pkey PRIMARY KEY (id),
-  CONSTRAINT fotos_grooming_ficha_id_fkey FOREIGN KEY (ficha_id) REFERENCES public.fichas_grooming(id)
+  cita_id uuid,
+  modificador_id uuid,
+  precio_aplicado numeric,
+  concepto_snap text,
+  estado_aprobacion text DEFAULT 'pendiente'::text CHECK (estado_aprobacion = ANY (ARRAY['pendiente'::text, 'aprobado'::text, 'rechazado'::text])),
+  url_evidencia text,
+  CONSTRAINT cita_modificadores_aplicados_pkey PRIMARY KEY (id),
+  CONSTRAINT cita_modificadores_aplicados_cita_id_fkey FOREIGN KEY (cita_id) REFERENCES public.citas(id),
+  CONSTRAINT cita_modificadores_aplicados_modificador_id_fkey FOREIGN KEY (modificador_id) REFERENCES public.modificadores_servicio(id)
 );
-CREATE TABLE public.horarios_base_groomer (
+CREATE TABLE public.detalle_pedidos (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  groomer_id uuid,
-  dia_semana integer CHECK (dia_semana >= 0 AND dia_semana <= 6),
-  hora_inicio time without time zone NOT NULL,
-  hora_fin time without time zone NOT NULL,
-  CONSTRAINT horarios_base_groomer_pkey PRIMARY KEY (id),
-  CONSTRAINT horarios_base_groomer_groomer_id_fkey FOREIGN KEY (groomer_id) REFERENCES public.perfiles(id)
+  pedido_id uuid,
+  producto_id uuid,
+  cantidad integer NOT NULL,
+  precio_unitario_snap numeric NOT NULL,
+  CONSTRAINT detalle_pedidos_pkey PRIMARY KEY (id),
+  CONSTRAINT detalle_pedidos_pedido_id_fkey FOREIGN KEY (pedido_id) REFERENCES public.pedidos(id),
+  CONSTRAINT detalle_pedidos_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id)
 );
-CREATE TABLE public.logs_auditoria (
+CREATE TABLE public.facturas (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  perfil_id uuid,
-  rol text,
-  ip_address text,
-  navegador text,
-  accion text NOT NULL,
-  fecha timestamp with time zone DEFAULT now(),
-  CONSTRAINT logs_auditoria_pkey PRIMARY KEY (id),
-  CONSTRAINT logs_auditoria_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
-);
-CREATE TABLE public.mascotas (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  dueno_id uuid,
-  nombre text NOT NULL,
-  especie text,
-  raza text,
-  tamano text,
-  temperamento text,
-  alergias text,
-  foto_perfil_url text,
-  CONSTRAINT mascotas_pkey PRIMARY KEY (id),
-  CONSTRAINT mascotas_dueno_id_fkey FOREIGN KEY (dueno_id) REFERENCES public.perfiles(id)
-);
-CREATE TABLE public.modificadores_servicio (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  servicio_id uuid,
-  criterio text,
-  valor text,
-  tiempo_extra_minutos integer DEFAULT 0,
-  precio_adicional numeric DEFAULT 0,
-  precio_es_porcentaje boolean DEFAULT false,
-  tiempo_es_porcentaje boolean DEFAULT false,
-  icon_name text DEFAULT 'Zap'::text,
-  CONSTRAINT modificadores_servicio_pkey PRIMARY KEY (id),
-  CONSTRAINT modificadores_servicio_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicios(id)
+  cliente_id uuid,
+  reserva_id uuid,
+  pedido_id uuid,
+  numero_factura integer NOT NULL DEFAULT nextval('facturas_numero_factura_seq'::regclass),
+  nit_ci text,
+  razon_social text,
+  monto_total numeric NOT NULL,
+  estado_factura text DEFAULT 'emitida'::text,
+  CONSTRAINT facturas_pkey PRIMARY KEY (id),
+  CONSTRAINT facturas_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.perfiles(id),
+  CONSTRAINT facturas_reserva_id_fkey FOREIGN KEY (reserva_id) REFERENCES public.reservas(id),
+  CONSTRAINT facturas_pedido_id_fkey FOREIGN KEY (pedido_id) REFERENCES public.pedidos(id)
 );
 CREATE TABLE public.pagos (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -198,81 +217,31 @@ CREATE TABLE public.pagos (
   CONSTRAINT pagos_pkey PRIMARY KEY (id),
   CONSTRAINT pagos_factura_id_fkey FOREIGN KEY (factura_id) REFERENCES public.facturas(id)
 );
-CREATE TABLE public.pasos_servicio (
+CREATE TABLE public.fotos_grooming (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  servicio_id uuid NOT NULL,
-  tarea_id uuid NOT NULL,
-  orden integer NOT NULL,
-  CONSTRAINT pasos_servicio_pkey PRIMARY KEY (id),
-  CONSTRAINT pasos_servicio_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicios(id),
-  CONSTRAINT pasos_servicio_tarea_id_fkey FOREIGN KEY (tarea_id) REFERENCES public.tareas_disponibles(id)
+  ficha_id uuid,
+  url_foto text NOT NULL,
+  tipo_momento text CHECK (tipo_momento = ANY (ARRAY['antes'::text, 'durante'::text, 'despues'::text])),
+  CONSTRAINT fotos_grooming_pkey PRIMARY KEY (id),
+  CONSTRAINT fotos_grooming_ficha_id_fkey FOREIGN KEY (ficha_id) REFERENCES public.fichas_grooming(id)
 );
-CREATE TABLE public.pedidos (
+CREATE TABLE public.checklist_seguimiento (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  cliente_id uuid,
-  monto_total numeric DEFAULT 0,
-  estado_pedido text DEFAULT 'pendiente'::text,
-  estado_pago text DEFAULT 'pendiente'::text,
-  CONSTRAINT pedidos_pkey PRIMARY KEY (id),
-  CONSTRAINT pedidos_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.perfiles(id)
+  ficha_id uuid,
+  tarea_id uuid,
+  completado boolean DEFAULT false,
+  observacion_item text,
+  CONSTRAINT checklist_seguimiento_pkey PRIMARY KEY (id),
+  CONSTRAINT checklist_seguimiento_ficha_id_fkey FOREIGN KEY (ficha_id) REFERENCES public.fichas_grooming(id),
+  CONSTRAINT checklist_seguimiento_tarea_id_fkey FOREIGN KEY (tarea_id) REFERENCES public.tareas_disponibles(id)
 );
-CREATE TABLE public.perfiles (
-  id uuid NOT NULL,
-  nombre_completo text,
-  rol text CHECK (rol = ANY (ARRAY['admin'::text, 'recepcion'::text, 'groomer'::text, 'cliente'::text])),
-  telefono text,
-  avatar_url text,
-  updated_at timestamp with time zone DEFAULT now(),
-  email text,
-  mfa_activado boolean DEFAULT false,
-  activo boolean DEFAULT true,
-  CONSTRAINT perfiles_pkey PRIMARY KEY (id),
-  CONSTRAINT perfiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
-);
-CREATE TABLE public.productos (
+CREATE TABLE public.encuestas_satisfaccion (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  categoria_id uuid,
-  nombre text NOT NULL,
-  precio_base numeric NOT NULL,
-  stock_actual integer DEFAULT 0,
-  stock_minimo_alerta integer DEFAULT 5,
-  es_insumo boolean DEFAULT false,
-  CONSTRAINT productos_pkey PRIMARY KEY (id),
-  CONSTRAINT productos_categoria_id_fkey FOREIGN KEY (categoria_id) REFERENCES public.categorias_productos(id)
-);
-CREATE TABLE public.reservas (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  cliente_id uuid,
-  fecha_creacion timestamp with time zone DEFAULT now(),
-  estado_general text DEFAULT 'pendiente'::text,
-  total_reserva numeric DEFAULT 0,
-  nombre_invitado text,
-  telefono_invitado text,
-  ci_invitado text,
-  origen text DEFAULT 'presencial'::text CHECK (origen = ANY (ARRAY['presencial'::text, 'web'::text, 'telefono'::text, 'whatsapp'::text])),
-  CONSTRAINT reservas_pkey PRIMARY KEY (id),
-  CONSTRAINT reservas_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.perfiles(id)
-);
-CREATE TABLE public.retiros_insumo (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  producto_id uuid,
-  groomer_id uuid,
-  cantidad integer NOT NULL,
-  fecha_retiro timestamp with time zone DEFAULT now(),
-  motivo text,
-  CONSTRAINT retiros_insumo_pkey PRIMARY KEY (id),
-  CONSTRAINT retiros_insumo_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id),
-  CONSTRAINT retiros_insumo_groomer_id_fkey FOREIGN KEY (groomer_id) REFERENCES public.perfiles(id)
-);
-CREATE TABLE public.servicios (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  nombre text NOT NULL,
-  descripcion text,
-  duracion_base_minutos integer NOT NULL,
-  precio_base numeric NOT NULL,
-  categoria text,
-  icon_name text DEFAULT 'Scissors'::text,
-  CONSTRAINT servicios_pkey PRIMARY KEY (id)
+  cita_id uuid UNIQUE,
+  puntuacion_nps integer CHECK (puntuacion_nps >= 1 AND puntuacion_nps <= 10),
+  comentario text,
+  CONSTRAINT encuestas_satisfaccion_pkey PRIMARY KEY (id),
+  CONSTRAINT encuestas_satisfaccion_cita_id_fkey FOREIGN KEY (cita_id) REFERENCES public.citas(id)
 );
 CREATE TABLE public.sesiones_activas (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -287,8 +256,101 @@ CREATE TABLE public.sesiones_activas (
   CONSTRAINT sesiones_activas_pkey PRIMARY KEY (id),
   CONSTRAINT sesiones_activas_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
 );
-CREATE TABLE public.tareas_disponibles (
+CREATE TABLE public.logs_auditoria (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  nombre text NOT NULL,
-  CONSTRAINT tareas_disponibles_pkey PRIMARY KEY (id)
+  perfil_id uuid,
+  rol text,
+  ip_address text,
+  navegador text,
+  accion text NOT NULL,
+  fecha timestamp with time zone DEFAULT now(),
+  CONSTRAINT logs_auditoria_pkey PRIMARY KEY (id),
+  CONSTRAINT logs_auditoria_perfil_id_fkey FOREIGN KEY (perfil_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.excepciones_agenda (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['general'::text, 'staff'::text])),
+  groomer_id uuid,
+  fecha_efectiva date NOT NULL,
+  todo_el_dia boolean DEFAULT true,
+  hora_inicio time without time zone,
+  hora_fin time without time zone,
+  motivo text NOT NULL,
+  detalle_opcional text,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT excepciones_agenda_pkey PRIMARY KEY (id),
+  CONSTRAINT excepciones_agenda_groomer_id_fkey FOREIGN KEY (groomer_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.pasos_servicio (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  servicio_id uuid NOT NULL,
+  tarea_id uuid NOT NULL,
+  orden integer NOT NULL,
+  CONSTRAINT pasos_servicio_pkey PRIMARY KEY (id),
+  CONSTRAINT pasos_servicio_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicios(id),
+  CONSTRAINT pasos_servicio_tarea_id_fkey FOREIGN KEY (tarea_id) REFERENCES public.tareas_disponibles(id)
+);
+CREATE TABLE public.feed_eventos_cita (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  cita_id uuid NOT NULL,
+  hora_evento time without time zone DEFAULT CURRENT_TIME,
+  descripcion text NOT NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT feed_eventos_cita_pkey PRIMARY KEY (id),
+  CONSTRAINT feed_eventos_cita_cita_id_fkey FOREIGN KEY (cita_id) REFERENCES public.citas(id)
+);
+CREATE TABLE public.movimientos_inventario (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  producto_id uuid NOT NULL,
+  usuario_id uuid NOT NULL,
+  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['ingreso'::text, 'salida'::text])),
+  categoria_motivo text NOT NULL,
+  cantidad integer NOT NULL CHECK (cantidad > 0),
+  detalle text,
+  fecha timestamp with time zone DEFAULT now(),
+  CONSTRAINT movimientos_inventario_pkey PRIMARY KEY (id),
+  CONSTRAINT movimientos_inventario_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id),
+  CONSTRAINT movimientos_inventario_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.comprobantes_pago (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  pedido_id uuid NOT NULL,
+  cliente_id uuid NOT NULL,
+  monto numeric NOT NULL CHECK (monto >= 0::numeric),
+  url_comprobante text NOT NULL,
+  codigo_transaccion text,
+  estado text DEFAULT 'pendiente'::text CHECK (estado = ANY (ARRAY['pendiente'::text, 'aprobado'::text, 'rechazado'::text])),
+  observaciones text,
+  fecha_envio timestamp with time zone DEFAULT now(),
+  revisado_por uuid,
+  fecha_revision timestamp with time zone,
+  CONSTRAINT comprobantes_pago_pkey PRIMARY KEY (id),
+  CONSTRAINT comprobantes_pago_pedido_id_fkey FOREIGN KEY (pedido_id) REFERENCES public.pedidos(id),
+  CONSTRAINT comprobantes_pago_cliente_id_fkey FOREIGN KEY (cliente_id) REFERENCES public.perfiles(id),
+  CONSTRAINT comprobantes_pago_revisado_por_fkey FOREIGN KEY (revisado_por) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.egresos_caja (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  monto numeric NOT NULL CHECK (monto >= 0::numeric),
+  categoria text,
+  descripcion text,
+  url_factura text,
+  registrado_por uuid,
+  fecha timestamp with time zone DEFAULT now(),
+  CONSTRAINT egresos_caja_pkey PRIMARY KEY (id),
+  CONSTRAINT egresos_caja_registrado_por_fkey FOREIGN KEY (registrado_por) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.notificaciones (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  usuario_id uuid,
+  rol_destino text CHECK (rol_destino = ANY (ARRAY['admin'::text, 'recepcion'::text, 'groomer'::text, 'cliente'::text])),
+  titulo text NOT NULL,
+  mensaje text NOT NULL,
+  tipo text NOT NULL CHECK (tipo = ANY (ARRAY['cita'::text, 'pedido'::text, 'pago'::text, 'stock'::text, 'ficha'::text, 'encuesta'::text, 'seguridad'::text])),
+  leido boolean DEFAULT false,
+  link_modulo text,
+  metadata jsonb DEFAULT '{}'::jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT notificaciones_pkey PRIMARY KEY (id),
+  CONSTRAINT notificaciones_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.perfiles(id)
 );

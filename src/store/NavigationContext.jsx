@@ -38,6 +38,12 @@ export const NavigationProvider = ({ children }) => {
     localStorage.setItem(storageKey, module);
   }, [storageKey]);
 
+  const resetToDefault = useCallback(() => {
+    const defaultMod = getDefaultModule(rolActual);
+    setActiveModuleState(defaultMod);
+    localStorage.setItem(storageKey, defaultMod);
+  }, [rolActual, storageKey]);
+
   useEffect(() => {
     if (!rolActual) return;
     const savedModule = localStorage.getItem(storageKey);
@@ -50,7 +56,7 @@ export const NavigationProvider = ({ children }) => {
     }
   }, [rolActual, storageKey, activeModule]);
 
-  const providerValue = useMemo(() => ({ activeModule, setActiveModule }), [activeModule, setActiveModule]);
+  const providerValue = useMemo(() => ({ activeModule, setActiveModule, resetToDefault }), [activeModule, setActiveModule, resetToDefault]);
 
   return (
     <NavigationContext.Provider value={providerValue}>

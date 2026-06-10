@@ -2,6 +2,7 @@ import { useState } from 'react';
 import PropTypes from 'prop-types';
 import { BarChart3, ShieldAlert, History, CheckCircle2, Search, RefreshCcw } from 'lucide-react';
 import { useGroomingMonitor } from '../hooks/useGroomingMonitor';
+import { useAuth } from '../../../store/AuthContext';
 import GroomerColumn from '../components/dashboard/GroomerColumn';
 import TriageAlertCard from '../components/triage/TriageAlertCard';
 import QualityCheckCard from '../components/triage/QualityCheckCard';
@@ -110,7 +111,7 @@ TriageTab.propTypes = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const HistoryTab = ({ statsToday }) => (
+const HistoryTab = ({ statsToday, completedToday, onOpenFicha }) => (
   <div className="animate-in fade-in slide-in-from-bottom-6 duration-500 flex flex-col gap-6">
     {/* Buscador */}
     <div className="bg-white border-[4px] border-black rounded-[2rem] p-6 shadow-[8px_8px_0px_0px_black] relative">
@@ -134,17 +135,36 @@ const HistoryTab = ({ statsToday }) => (
       retrasados={statsToday.retrasados}
       recargos={0}
     />
+
+    <div className="mt-4">
+      <h3 className="font-black text-xl uppercase italic mb-4 pl-2 border-l-8 border-black">
+        Fichas Completadas
+      </h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {completedToday.map((cita) => (
+          <QualityCheckCard key={cita.id} cita={cita} onOpenFicha={onOpenFicha} />
+        ))}
+        {completedToday.length === 0 && (
+          <p className="text-slate-400 font-black uppercase text-sm col-span-3 text-center py-8">
+            No hay citas en el historial para mostrar
+          </p>
+        )}
+      </div>
+    </div>
   </div>
 );
 
 HistoryTab.propTypes = {
   statsToday: PropTypes.object.isRequired,
+  completedToday: PropTypes.array.isRequired,
+  onOpenFicha: PropTypes.func.isRequired,
 };
 
 // ── Vista principal ──────────────────────────────────────────────────────────
 
 const GroomingMonitorView = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const { currentUser, rolActual } = useAuth();
 
   const {
     groomers,
@@ -158,13 +178,33 @@ const GroomingMonitorView = () => {
     closeFicha,
     handleDrop,
     approveAlert,
+    selectedDate,
+    setSelectedDate,
     refresh,
   } = useGroomingMonitor();
+
+  const filteredCompletedToday = rolActual === 'groomer'
+    ? completedToday.filter((c) => c.groomer_id === currentUser?.id)
+    : completedToday;
+
+  const filteredCitas = rolActual === 'groomer'
+    ? citas.filter((c) => c.groomer_id === currentUser?.id)
+    : citas;
+
+  const filteredGroomers = rolActual === 'groomer'
+    ? groomers.filter((g) => g.id === currentUser?.id)
+    : groomers;
+
+  const filteredStatsToday = {
+    completados: filteredCompletedToday.length,
+    retrasados: filteredCitas.filter((c) => new Date(c.fecha_hora_fin) < new Date()).length,
+    enProceso: filteredCitas.filter((c) => c.estado === 'en_proceso').length,
+  };
 
   // Derivar alertas de triage a partir de citas activas con ficha que tiene flags
   // (en producción real vendrían de fichas con nudos/pulgas/heridas = true)
   // Por ahora: citas cuya ficha tenga algún flag activo
-  const fichasConAlertas = citas
+  const fichasConAlertas = filteredCitas
     .filter((c) => c.ficha?.estado_ingreso_nudos || c.ficha?.estado_ingreso_pulgas || c.ficha?.estado_ingreso_heridas)
     .map((c) => ({
       id: c.id,
@@ -203,12 +243,23 @@ const GroomingMonitorView = () => {
           <h1 className="text-4xl font-black tracking-tighter uppercase italic flex items-center gap-3 leading-none">
             Monitor <span className="text-[var(--primary)]">Grooming</span>
           </h1>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="flex h-3 w-3 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-black" />
-            </span>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Operaciones en Vivo</p>
+          <div className="flex items-center gap-4 mt-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="flex h-3 w-3 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-black" />
+              </span>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Operaciones en Vivo</p>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-100 border-2 border-black rounded-lg px-2 py-1 shadow-[2px_2px_0px_0px_black] scale-95">
+              <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Día:</span>
+              <input 
+                type="date" 
+                value={selectedDate} 
+                onChange={(e) => setSelectedDate(e.target.value)} 
+                className="bg-transparent font-black text-[10px] outline-none cursor-pointer"
+              />
+            </div>
           </div>
         </div>
 
@@ -250,8 +301,8 @@ const GroomingMonitorView = () => {
       <div className="flex-1">
         {activeTab === 'dashboard' && (
           <DashboardTab
-            groomers={groomers}
-            citas={citas}
+            groomers={filteredGroomers}
+            citas={filteredCitas}
             onOpenFicha={openFicha}
             onDrop={handleDrop}
           />
@@ -259,12 +310,12 @@ const GroomingMonitorView = () => {
         {activeTab === 'triage' && (
           <TriageTab
             fichasConAlertas={fichasConAlertas}
-            completedToday={completedToday}
+            completedToday={filteredCompletedToday}
             onOpenFicha={openFicha}
             onApproveAlert={approveAlert}
           />
         )}
-        {activeTab === 'history' && <HistoryTab statsToday={statsToday} />}
+        {activeTab === 'history' && <HistoryTab statsToday={filteredStatsToday} completedToday={filteredCompletedToday} onOpenFicha={openFicha} />}
       </div>
 
       {/* Modal de Auditoría */}

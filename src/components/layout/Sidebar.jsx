@@ -6,7 +6,7 @@ import {
   Zap, Settings,
   Home, ClipboardCheck, Users, CreditCard,
   BarChart3, Calendar,
-  Activity, BookOpen, Droplets, Package, Wallet, Monitor, PawPrint, Scissors, History
+  Activity, BookOpen, Droplets, Package, Wallet, PawPrint, Scissors, History
 } from 'lucide-react';
 import { getDefaultModule } from '../../utils/rbac';
 
@@ -14,30 +14,32 @@ import { getDefaultModule } from '../../utils/rbac';
 const NAV_BY_ROLE = {
   cliente: [
     { id: 'tienda', icon: <Home />, label: 'Tienda' },
-    { id: 'mascotas', icon: <PawPrint />, label: 'Mascotas' },
     { id: 'reservar', icon: <Calendar />, label: 'Reservar' },
+    { id: 'mascotas', icon: <PawPrint />, label: 'Mascotas' },
     { id: 'historial', icon: <BookOpen />, label: 'Historial' },
   ],
   groomer: [
     { id: 'turnos', icon: <ClipboardCheck />, label: 'Mis Turnos' },
     { id: 'atencion', icon: <Activity />, label: 'En Atención' },
-    { id: 'historial', icon: <BookOpen />, label: 'Historial' },
     { id: 'insumos', icon: <Droplets />, label: 'Insumos' },
+    { id: 'tienda', icon: <Home />, label: 'Tienda' },
+    { id: 'historial', icon: <History />, label: 'Historial' },
   ],
   admin: [
     { id: 'reports', icon: <BarChart3 />, label: 'Inicio' },
-    { id: 'users', icon: <Users />, label: 'Usuarios' },
     { id: 'agenda', icon: <Calendar />, label: 'Agenda' },
-    { id: 'grooming', icon: <Activity />, label: 'Grooming' },
-    { id: 'services', icon: <Scissors />, label: 'Servicios' },
+    { id: 'users', icon: <Users />, label: 'Usuarios' },
     { id: 'inventory', icon: <Package />, label: 'Inventario' },
-    {id: 'finance', icon: <Wallet />, label: 'Finanzas' },
+    { id: 'services', icon: <Scissors />, label: 'Servicios' },
+    { id: 'finance', icon: <Wallet />, label: 'Finanzas' },
+    { id: 'grooming', icon: <Activity />, label: 'Grooming' },
     { id: 'audit', icon: <History />, label: 'Auditoría' },
   ],
   recepcion: [
     { id: 'agenda', icon: <Calendar />, label: 'Agenda' },
+    { id: 'inventory', icon: <Package />, label: 'Ventas/POS' },
     { id: 'clients', icon: <Users />, label: 'Clientes' },
-    { id: 'monitor', icon: <Monitor />, label: 'Monitor' },
+    { id: 'grooming', icon: <Activity />, label: 'Grooming' },
     { id: 'cash', icon: <CreditCard />, label: 'Caja' },
   ],
 };
@@ -55,7 +57,7 @@ const Sidebar = ({ onOpenSettings }) => {
   const isPopRole = rolActual === 'admin' || rolActual === 'recepcion';
 
   return (
-    <aside className="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-50 flex-col items-center gap-5">
+    <aside className="hidden md:flex fixed left-6 top-1/2 -translate-y-1/2 z-50 flex-col items-center gap-5 animate-in slide-in-from-left-8 duration-700 fade-in">
       {/* Logo condensado */}
       <button
         onClick={() => setActiveModule(getDefaultModule(rolActual))}
@@ -83,7 +85,7 @@ const Sidebar = ({ onOpenSettings }) => {
 
               <button
                 onClick={() => {
-                  if (item.id === 'users') {
+                  if (item.id === 'users' || item.id === 'clients') {
                     setProfileMode(rolActual === 'admin' || rolActual === 'recepcion' ? 'directory' : 'self');
                   }
                   setActiveModule(item.id);

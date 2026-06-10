@@ -14,6 +14,8 @@ const FilterPanel = ({
   onlyStock, setOnlyStock,
   searchQuery, setSearchQuery,
   onClearFilters,
+  viewMode = 'productos',
+  categoriesList = categories
 }) => {
   return (
     <div className="bg-white border-[4px] border-black p-7 rounded-[2.5rem] shadow-[8px_8px_0px_0px_var(--shadow)] mb-12 relative overflow-visible pt-12">
@@ -23,7 +25,7 @@ const FilterPanel = ({
         <PopSelect
           label="Categoría"
           value={activeCategory}
-          options={categories.map((c) => ({ label: c, value: c }))}
+          options={categoriesList.map((c) => ({ label: c, value: c }))}
           onChange={setActiveCategory}
           activeColor="bg-[var(--primary)] text-white"
           icon={Filter}
@@ -64,22 +66,24 @@ const FilterPanel = ({
         {/* Stock + Reset */}
         <div className="flex gap-4 items-end lg:col-span-1 h-full">
           {/* Toggle Stock */}
-          <div className={`relative transition-all duration-300 flex-1 ${onlyStock ? 'rotate-[2deg] scale-105 z-30' : 'z-20'}`}>
-            <div className="absolute -top-3 left-3 z-30 bg-black text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">
-              Stock
+          {viewMode === 'productos' && (
+            <div className={`relative transition-all duration-300 flex-1 ${onlyStock ? 'rotate-[2deg] scale-105 z-30' : 'z-20'}`}>
+              <div className="absolute -top-3 left-3 z-30 bg-black text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">
+                Stock
+              </div>
+              <button
+                onClick={() => setOnlyStock(!onlyStock)}
+                className={`w-full border-[3.5px] border-black px-4 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all shadow-[4px_4px_0px_0px_black] flex items-center justify-center gap-2 ${
+                  onlyStock ? 'bg-emerald-400 text-black' : 'bg-slate-50 text-slate-400 hover:bg-white'
+                }`}
+              >
+                {onlyStock ? <CheckCircle2 size={14} /> : <Plus size={14} />} Stock
+              </button>
             </div>
-            <button
-              onClick={() => setOnlyStock(!onlyStock)}
-              className={`w-full border-[3.5px] border-black px-4 py-3.5 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all shadow-[4px_4px_0px_0px_black] flex items-center justify-center gap-2 ${
-                onlyStock ? 'bg-emerald-400 text-black' : 'bg-slate-50 text-slate-400 hover:bg-white'
-              }`}
-            >
-              {onlyStock ? <CheckCircle2 size={14} /> : <Plus size={14} />} Stock
-            </button>
-          </div>
+          )}
 
           {/* Botón Reset */}
-          <div className="relative z-30">
+          <div className={`relative z-30 ${viewMode !== 'productos' ? 'flex-1' : ''}`}>
             <div className="absolute -top-3 left-2 bg-rose-600 text-white px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest shadow-sm">
               Reset
             </div>
