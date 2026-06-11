@@ -22,6 +22,7 @@ const ReceptionDailyControl = () => {
     handleAbrirCheckout,
     handleCerrarCheckout,
     handleFinalizarPago,
+    handleUpdateModifierStatus,
   } = useReceptionControl();
 
   if (loading && citasEsperando.length === 0 && citasEnProceso.length === 0 && citasListas.length === 0) {
@@ -75,6 +76,7 @@ const ReceptionDailyControl = () => {
               cita={cita}
               extras={modificadoresMap[cita.id] || []}
               onComplete={handleCompletarCita}
+              onUpdateModifierStatus={handleUpdateModifierStatus}
             />
           ))}
           {citasEnProceso.length === 0 && (

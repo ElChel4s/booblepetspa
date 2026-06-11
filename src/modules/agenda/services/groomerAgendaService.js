@@ -282,7 +282,7 @@ export const withdrawInsumo = async (productoId, groomerId, citaId) => {
 /**
  * Guarda el diagnóstico definitivo de la ficha y marca la cita como completada.
  */
-export const saveAndFinishFicha = async (citaId, fichaForm) => {
+export const saveAndFinishFicha = async (citaId, fichaForm, insumosUsados = [], groomerId = null) => {
   if (!supabase) return { error: NOT_CONFIGURED_ERROR };
 
   // 1. Actualizar ficha_grooming
@@ -316,6 +316,88 @@ export const saveAndFinishFicha = async (citaId, fichaForm) => {
     .update({ estado: 'completada' })
     .eq('id', citaId);
 
-  return { error: updateCitaError };
+  if (updateCitaError) return { error: updateCitaError };
+
+  // 4. Guardar insumos consumidos manualmente e impactar inventario si aplica
+  try {
+    // Resolver groomer_id de la cita si no se proporcionó
+    let currentGroomerId = groomerId;
+    if (!currentGroomerId) {
+      const { data: citaData } = await supabase
+        .from('citas')
+        .select('groomer_id')
+        .eq('id', citaId)
+        .single();
+      if (citaData) {
+        currentGroomerId = citaData.groomer_id;
+      }
+    }
+
+    // Limpiar insumos previamente registrados para esta cita (resiliencia)
+    await supabase
+      .from('cita_insumos_usados')
+      .delete()
+      .eq('cita_id', citaId);
+
+    // Procesar cada insumo
+    for (const item of insumosUsados) {
+      // a. Insertar registro de uso
+      await supabase
+        .from('cita_insumos_usados')
+        .insert({
+          cita_id: citaId,
+          producto_id: item.producto_id,
+          cantidad: item.cantidad,
+          abrio_nuevo: !!item.abrio_nuevo
+        });
+
+      // b. Si abrió un envase nuevo, descontar en productos y registrar retiros/movimientos
+      if (item.abrio_nuevo) {
+        // Consultar stock real antes de descontar para evitar inconsistencias
+        const { data: prodData } = await supabase
+          .from('productos')
+          .select('stock_actual')
+          .eq('id', item.producto_id)
+          .single();
+
+        const currentStock = prodData ? prodData.stock_actual : 0;
+        const newStock = Math.max(0, currentStock - 1);
+
+        // Descontar stock
+        const { error: stockErr } = await supabase
+          .from('productos')
+          .update({ stock_actual: newStock })
+          .eq('id', item.producto_id);
+
+        if (!stockErr && currentGroomerId) {
+          // Registrar en retiros_insumo
+          await supabase
+            .from('retiros_insumo')
+            .insert({
+              producto_id: item.producto_id,
+              groomer_id: currentGroomerId,
+              cantidad: 1,
+              motivo: `Apertura de insumo nuevo desde checkout (Cita: ${citaId})`
+            });
+
+          // Registrar en movimientos_inventario
+          await supabase
+            .from('movimientos_inventario')
+            .insert({
+              producto_id: item.producto_id,
+              usuario_id: currentGroomerId,
+              tipo: 'salida',
+              categoria_motivo: 'Uso Interno',
+              cantidad: 1,
+              detalle: `Apertura de insumo nuevo en checkout (Cita: ${citaId})`
+            });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error al procesar insumos manuales:', err);
+  }
+
+  return { error: null };
 };
 

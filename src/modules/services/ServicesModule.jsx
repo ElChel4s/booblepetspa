@@ -53,12 +53,12 @@ const BrutalInput = ({ label, type = 'text', placeholder, value, onChange, icon:
   </div>
 );
 
-const PopModal = ({ isOpen, onClose, title, children }) => {
+const PopModal = ({ isOpen, onClose, title, children, sizeClass = 'max-w-2xl' }) => {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white border-[6px] border-black rounded-[3.5rem] shadow-[15px_15px_0px_0px_black] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-8 relative animate-in zoom-in-95">
+      <div className={`bg-white border-[6px] border-black rounded-[3.5rem] shadow-[15px_15px_0px_0px_black] w-full ${sizeClass} max-h-[90vh] overflow-y-auto p-8 relative animate-in zoom-in-95`}>
         <button onClick={onClose} className="absolute top-8 right-8 p-2 hover:rotate-90 transition-transform bg-rose-100 text-rose-600 rounded-full border-2 border-black">
           <X size={20} strokeWidth={4} />
         </button>
@@ -98,6 +98,7 @@ const ServicesModule = () => {
   const [dbServices, setDbServices] = useState([]);
   const [dbModifiers, setDbModifiers] = useState([]);
   const [dbTasks, setDbTasks] = useState([]);
+  const [dbProducts, setDbProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -112,6 +113,11 @@ const ServicesModule = () => {
   const [serviceSteps, setServiceSteps] = useState([]);
   const [selectedTaskToAdd, setSelectedTaskToAdd] = useState('');
 
+  // Constructor de Recetas
+  const [serviceInputs, setServiceInputs] = useState([]);
+  const [selectedProductToAdd, setSelectedProductToAdd] = useState('');
+  const [productQtyToAdd, setProductQtyToAdd] = useState('');
+
   const fetchServicesAndModifiers = async () => {
     setLoading(true);
     setError(null);
@@ -119,18 +125,21 @@ const ServicesModule = () => {
       if (!supabase) {
         throw new Error('Supabase no está inicializado');
       }
-      const [srvRes, modRes, taskRes] = await Promise.all([
+      const [srvRes, modRes, taskRes, prodRes] = await Promise.all([
         supabase.from('servicios').select('*').order('nombre', { ascending: true }),
         supabase.from('modificadores_servicio').select('*').order('criterio', { ascending: true }),
         supabase.from('tareas_disponibles').select('*').order('nombre', { ascending: true }),
+        supabase.from('productos').select('*').eq('es_insumo', true).order('nombre', { ascending: true }),
       ]);
 
       if (srvRes.error) throw srvRes.error;
       if (modRes.error) throw modRes.error;
       if (taskRes.error) throw taskRes.error;
+      if (prodRes.error) throw prodRes.error;
 
       setDbServices(srvRes.data || []);
       setDbModifiers(modRes.data || []);
+      setDbProducts(prodRes.data || []);
       
       let tasksData = taskRes.data || [];
       if (tasksData.length === 0) {
@@ -232,6 +241,22 @@ const ServicesModule = () => {
         } else {
           setServiceSteps([]);
         }
+
+        // Cargar insumos
+        const { data: recetas } = await supabase
+          .from('recetas_insumos')
+          .select('id, producto_id, cantidad, producto:productos(nombre)')
+          .eq('servicio_id', item.id);
+        
+        if (recetas) {
+          setServiceInputs(recetas.map(r => ({
+            producto_id: r.producto_id,
+            nombre: r.producto?.nombre,
+            cantidad: r.cantidad
+          })));
+        } else {
+          setServiceInputs([]);
+        }
       } else {
         setFormValues({
           criterio: item.nombre || '',
@@ -246,6 +271,7 @@ const ServicesModule = () => {
       setEditingItem({ type, isPercent: type === 'rule' });
       if (type === 'service') {
         setServiceSteps([]);
+        setServiceInputs([]);
         setFormValues({ nombre: '', categoria: '', precio_base: 0, duracion_base_minutos: 60 });
       } else {
         setFormValues({ criterio: '', valor: '', tiempo_extra_minutos: 0, precio_adicional: 0, tiempo_es_porcentaje: false, precio_es_porcentaje: false });
@@ -259,7 +285,10 @@ const ServicesModule = () => {
     setEditingItem(null);
     setFormValues(null);
     setServiceSteps([]);
+    setServiceInputs([]);
     setSelectedTaskToAdd('');
+    setSelectedProductToAdd('');
+    setProductQtyToAdd('');
   };
 
   const handleAddStep = () => {
@@ -274,6 +303,25 @@ const ServicesModule = () => {
 
     setServiceSteps((prev) => [...prev, { tarea_id: task.id, nombre: task.nombre }]);
     setSelectedTaskToAdd('');
+  };
+
+  const handleAddInput = () => {
+    if (!selectedProductToAdd || !productQtyToAdd) return;
+    const prod = dbProducts.find(p => p.id === selectedProductToAdd);
+    if (!prod) return;
+
+    if (serviceInputs.some(i => i.producto_id === prod.id)) {
+      showFeedback('error', 'El insumo ya está en la receta');
+      return;
+    }
+
+    setServiceInputs(prev => [...prev, { producto_id: prod.id, nombre: prod.nombre, cantidad: Number(productQtyToAdd) }]);
+    setSelectedProductToAdd('');
+    setProductQtyToAdd('');
+  };
+
+  const handleRemoveInput = (index) => {
+    setServiceInputs(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleRemoveStep = (index) => {
@@ -391,6 +439,24 @@ const ServicesModule = () => {
           if (insErr) {
             console.error('Error al insertar nuevos pasos:', insErr);
             showFeedback('error', 'El servicio se guardó, pero no se pudo persistir la secuencia de pasos.');
+            setSaving(false);
+            return;
+          }
+        }
+
+        // 3. Limpiar insumos anteriores y guardar la nueva receta
+        await supabase.from('recetas_insumos').delete().eq('servicio_id', serviceId);
+        
+        if (serviceInputs.length > 0) {
+          const inputsPayload = serviceInputs.map((input) => ({
+            servicio_id: serviceId,
+            producto_id: input.producto_id,
+            cantidad: input.cantidad
+          }));
+          const { error: insumoErr } = await supabase.from('recetas_insumos').insert(inputsPayload);
+          if (insumoErr) {
+            console.error('Error al insertar insumos:', insumoErr);
+            showFeedback('error', 'El servicio se guardó, pero no se pudo persistir la receta de insumos.');
             setSaving(false);
             return;
           }
@@ -569,139 +635,225 @@ const ServicesModule = () => {
         </div>
       )}
 
-      {/* Modal de Formulario */}
-      <PopModal isOpen={isFormOpen} onClose={closeForm} title={editingItem?.id ? (editingItem.type === 'service' ? 'Editar Servicio' : 'Editar Regla') : (editingItem?.type === 'service' ? 'Nuevo Servicio' : 'Nueva Regla')}>
+      <PopModal 
+        isOpen={isFormOpen} 
+        onClose={closeForm} 
+        title={editingItem?.id ? (editingItem.type === 'service' ? 'Editar Servicio' : 'Editar Regla') : (editingItem?.type === 'service' ? 'Nuevo Servicio' : 'Nueva Regla')}
+        sizeClass={editingItem?.type === 'service' ? 'max-w-5xl' : 'max-w-2xl'}
+      >
         {editingItem?.type === 'service' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* Columna Izquierda: Datos del Servicio */}
-            <div className="flex flex-col gap-4">
-              <BrutalInput label="Nombre" placeholder="Ej. Baño Premium" value={formValues?.nombre || ''} onChange={(event) => setFormValues((prev) => ({ ...prev, nombre: event.target.value }))} />
-              <div className="flex gap-4">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+            {/* Columna 1: Datos Generales */}
+            <div className="flex flex-col gap-5 bg-[#fafafa] p-8 rounded-[2.5rem] border-[5px] border-black shadow-[8px_8px_0px_0px_black] h-full justify-between min-h-[500px]">
+              <div className="space-y-4">
+                <h4 className="text-lg font-black uppercase italic mb-3 border-b-2 border-black/10 pb-1 flex items-center gap-2">
+                  📝 Detalles
+                </h4>
+                <BrutalInput label="Nombre del Servicio" placeholder="Ej. Baño Premium" value={formValues?.nombre || ''} onChange={(event) => setFormValues((prev) => ({ ...prev, nombre: event.target.value }))} />
                 <BrutalInput label="Categoría" placeholder="Ej. Spa" value={formValues?.categoria || ''} onChange={(event) => setFormValues((prev) => ({ ...prev, categoria: event.target.value }))} />
-                <BrutalInput label="Precio Base" type="number" placeholder="0.00" value={formValues?.precio_base ?? ''} onChange={(event) => setFormValues((prev) => ({ ...prev, precio_base: event.target.value }))} icon={DollarSign} />
+                <div className="grid grid-cols-2 gap-4">
+                  <BrutalInput label="Precio Base" type="number" placeholder="0.00" value={formValues?.precio_base ?? ''} onChange={(event) => setFormValues((prev) => ({ ...prev, precio_base: event.target.value }))} icon={DollarSign} />
+                  <BrutalInput label="Duración (Min)" type="number" placeholder="60" value={formValues?.duracion_base_minutos ?? ''} onChange={(event) => setFormValues((prev) => ({ ...prev, duracion_base_minutos: event.target.value }))} icon={Timer} />
+                </div>
               </div>
-              <BrutalInput label="Duración (Minutos)" type="number" placeholder="60" value={formValues?.duracion_base_minutos ?? ''} onChange={(event) => setFormValues((prev) => ({ ...prev, duracion_base_minutos: event.target.value }))} icon={Timer} />
               
-              <button onClick={submitCatalog} disabled={saving} className="mt-4 py-4 bg-[var(--primary)] text-white border-[4px] border-black rounded-2xl font-black text-sm uppercase shadow-[6px_6px_0px_0px_black] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-70 active:scale-95 cursor-pointer">
+              <button onClick={submitCatalog} disabled={saving} className="w-full mt-6 py-4 bg-black text-white border-[4px] border-black rounded-2xl font-black text-base uppercase shadow-[6px_6px_0px_0px_var(--primary)] hover:translate-y-0.5 hover:shadow-[3px_3px_0px_0px_var(--primary)] transition-all disabled:opacity-70 active:translate-y-2 active:shadow-none cursor-pointer shrink-0">
                 {saving ? 'Guardando...' : 'Guardar Cambios'}
               </button>
             </div>
 
-            {/* Columna Derecha: Constructor de Pasos */}
-            <div className="border-[4px] border-black p-5 rounded-[2.5rem] bg-amber-50 shadow-[6px_6px_0px_0px_black] flex flex-col justify-between">
-              <div>
-                <h4 className="text-lg font-black uppercase italic mb-3 border-b-2 border-black/10 pb-1 flex items-center gap-2">
-                  🛠️ Constructor de Pasos
-                </h4>
-                <p className="text-[10px] font-bold text-slate-500 uppercase mb-4 leading-normal">
-                  Define el flujo ordenado de tareas para el servicio. Arrastra las filas o usa las flechas para ordenar.
-                </p>
+            {/* Columna 2: Pasos del Servicio */}
+            <div className="border-[5px] border-black p-8 rounded-[2.5rem] bg-indigo-50 shadow-[8px_8px_0px_0px_black] flex flex-col h-full min-h-[500px]">
+              <h4 className="text-lg font-black uppercase italic mb-3 border-b-2 border-black/10 pb-1 flex items-center gap-2">
+                🛠️ Tareas y Pasos
+              </h4>
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-4 leading-normal">
+                Define el flujo ordenado de tareas. Arrastra las filas o usa las flechas para ordenar.
+              </p>
 
-                {/* Dropdown selector de Tarea */}
-                <div className="flex gap-2 mb-4">
-                  <select
-                    value={selectedTaskToAdd}
-                    onChange={(e) => setSelectedTaskToAdd(e.target.value)}
-                    className="flex-1 bg-white border-2 border-black rounded-xl p-2 font-bold text-xs"
-                  >
-                    <option value="">Seleccionar Tarea...</option>
-                    {dbTasks.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.nombre}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={handleAddStep}
-                    className="bg-black text-white px-4 py-2 rounded-xl font-black text-xs uppercase shadow-[2px_2px_0px_0px_var(--primary)] hover:translate-y-0.5 active:translate-y-1 transition-all cursor-pointer"
-                  >
-                    + Añadir
-                  </button>
-                </div>
+              {/* Selector de Tarea */}
+              <div className="flex gap-2 mb-4 shrink-0">
+                <select
+                  value={selectedTaskToAdd}
+                  onChange={(e) => setSelectedTaskToAdd(e.target.value)}
+                  className="flex-1 bg-white border-[3px] border-black rounded-xl p-2 font-bold text-xs shadow-[2px_2px_0px_0px_black] focus:outline-none"
+                >
+                  <option value="">Seleccionar Tarea...</option>
+                  {dbTasks.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.nombre}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddStep}
+                  className="bg-black text-white px-4 py-2 rounded-xl font-black text-xs uppercase border-2 border-black shadow-[2px_2px_0px_0px_var(--primary)] hover:translate-y-0.5 active:translate-y-1 transition-all cursor-pointer shrink-0"
+                >
+                  +
+                </button>
+              </div>
 
-                {/* Lista de Pasos */}
-                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {serviceSteps.length === 0 ? (
-                    <div className="text-center py-6 text-xs font-bold text-slate-400 uppercase italic border-2 border-dashed border-slate-300 rounded-xl bg-white/50">
-                      Sin pasos asignados
-                    </div>
-                  ) : (
-                    serviceSteps.map((step, idx) => (
-                      <div
-                        key={idx}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, idx)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => handleDrop(e, idx)}
-                        className="bg-white border-2 border-black rounded-xl p-2 flex justify-between items-center shadow-sm cursor-move active:scale-95 transition-all hover:bg-slate-50"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="bg-black text-white text-[9px] font-black uppercase px-2 py-0.5 rounded leading-none shrink-0">
-                            {idx + 1}
-                          </span>
-                          <span className="text-xs font-black truncate max-w-[130px] leading-tight text-slate-800">
-                            {step.nombre}
-                          </span>
-                        </div>
-
-                        {/* Controles de Orden y Borrado */}
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleMoveStepUp(idx)}
-                            disabled={idx === 0}
-                            className="p-1 bg-slate-100 hover:bg-slate-200 rounded border border-black text-xs disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                            title="Subir"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleMoveStepDown(idx)}
-                            disabled={idx === serviceSteps.length - 1}
-                            className="p-1 bg-slate-100 hover:bg-slate-200 rounded border border-black text-xs disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                            title="Bajar"
-                          >
-                            ▼
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveStep(idx)}
-                            className="p-1 bg-rose-100 hover:bg-rose-200 border border-black rounded text-rose-600 cursor-pointer"
-                            title="Eliminar"
-                          >
-                            <X size={10} strokeWidth={4} />
-                          </button>
-                        </div>
+              {/* Lista de Pasos */}
+              <div className="space-y-2 flex-1 overflow-y-auto pr-1 max-h-[260px] custom-scrollbar">
+                {serviceSteps.length === 0 ? (
+                  <div className="text-center py-8 text-xs font-bold text-slate-400 uppercase italic border-2 border-dashed border-slate-300 rounded-xl bg-white/60">
+                    Sin pasos asignados
+                  </div>
+                ) : (
+                  serviceSteps.map((step, idx) => (
+                    <div
+                      key={idx}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, idx)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => handleDrop(e, idx)}
+                      className="bg-white border-2 border-black rounded-xl p-2.5 flex justify-between items-center shadow-[2px_2px_0px_0px_black] cursor-grab active:cursor-grabbing hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="bg-black text-white text-[9px] font-black uppercase px-1.5 py-0.5 rounded leading-none shrink-0">
+                          {idx + 1}
+                        </span>
+                        <span className="text-[11px] font-black truncate max-w-[120px] text-slate-800 leading-tight">
+                          {step.nombre}
+                        </span>
                       </div>
-                    ))
-                  )}
-                </div>
+
+                      {/* Controles */}
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStepUp(idx)}
+                          disabled={idx === 0}
+                          className="p-1 bg-slate-100 hover:bg-slate-200 rounded border border-black text-[9px] disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                          title="Subir"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveStepDown(idx)}
+                          disabled={idx === serviceSteps.length - 1}
+                          className="p-1 bg-slate-100 hover:bg-slate-200 rounded border border-black text-[9px] disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                          title="Bajar"
+                        >
+                          ▼
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveStep(idx)}
+                          className="p-1 bg-rose-50 hover:bg-rose-100 border border-black rounded text-rose-600 cursor-pointer"
+                          title="Eliminar"
+                        >
+                          <X size={10} strokeWidth={4} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Columna 3: Receta de Insumos */}
+            <div className="border-[5px] border-black p-8 rounded-[2.5rem] bg-emerald-50 shadow-[8px_8px_0px_0px_black] flex flex-col h-full min-h-[500px]">
+              <h4 className="text-lg font-black uppercase italic mb-3 border-b-2 border-black/10 pb-1 flex items-center gap-2">
+                🧴 Receta de Insumos
+              </h4>
+              <p className="text-[10px] font-bold text-slate-500 uppercase mb-4 leading-normal">
+                Define los productos que se descontarán automáticamente al completar el servicio.
+              </p>
+
+              {/* Selector de Producto */}
+              <div className="flex gap-2 mb-4 shrink-0">
+                <select
+                  value={selectedProductToAdd}
+                  onChange={(e) => setSelectedProductToAdd(e.target.value)}
+                  className="flex-1 bg-white border-[3px] border-black rounded-xl p-2 font-bold text-xs shadow-[2px_2px_0px_0px_black] focus:outline-none"
+                >
+                  <option value="">Seleccionar Insumo...</option>
+                  {dbProducts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  placeholder="Cant."
+                  value={productQtyToAdd}
+                  onChange={(e) => setProductQtyToAdd(e.target.value)}
+                  className="w-14 bg-white border-[3px] border-black rounded-xl p-2 font-bold text-xs shadow-[2px_2px_0px_0px_black] focus:outline-none shrink-0"
+                  min="0.1"
+                  step="0.1"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddInput}
+                  className="bg-black text-white px-3 py-2 rounded-xl font-black text-xs uppercase border-2 border-black shadow-[2px_2px_0px_0px_var(--primary)] hover:translate-y-0.5 active:translate-y-1 transition-all cursor-pointer shrink-0"
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Lista de Insumos */}
+              <div className="space-y-2 flex-1 overflow-y-auto pr-1 max-h-[260px] custom-scrollbar">
+                {serviceInputs.length === 0 ? (
+                  <div className="text-center py-8 text-xs font-bold text-slate-400 uppercase italic border-2 border-dashed border-slate-300 rounded-xl bg-white/60">
+                    Sin insumos asignados
+                  </div>
+                ) : (
+                  serviceInputs.map((input, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white border-2 border-black rounded-xl p-2.5 flex justify-between items-center shadow-[2px_2px_0px_0px_black]"
+                    >
+                      <span className="text-[11px] font-black truncate max-w-[130px] text-slate-800 leading-tight">
+                        {input.nombre}
+                      </span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-black bg-slate-100 px-2 py-0.5 rounded border border-black leading-none text-slate-700">
+                          {input.cantidad} un.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveInput(idx)}
+                          className="p-1 bg-rose-50 hover:bg-rose-100 border border-black rounded text-rose-600 cursor-pointer"
+                          title="Eliminar"
+                        >
+                          <X size={10} strokeWidth={4} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            <BrutalInput label="Nombre" placeholder="Ej. Mascota Gigante" value={formValues?.criterio || ''} onChange={(event) => setFormValues((prev) => ({ ...prev, criterio: event.target.value }))} />
-            <div className="flex gap-4">
+          <div className="flex flex-col gap-6 bg-[#fafafa] p-8 rounded-[2.5rem] border-[5px] border-black shadow-[8px_8px_0px_0px_black]">
+            <BrutalInput label="Nombre de la Regla" placeholder="Ej. Mascota Gigante" value={formValues?.criterio || ''} onChange={(event) => setFormValues((prev) => ({ ...prev, criterio: event.target.value }))} />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <BrutalInput label="Categoría" placeholder="Ej. Modificador" value={formValues?.valor || ''} onChange={(event) => setFormValues((prev) => ({ ...prev, valor: event.target.value }))} />
-              <BrutalInput label="Precio" type="number" placeholder="0.00" value={formValues?.precio_adicional ?? ''} onChange={(event) => setFormValues((prev) => ({ ...prev, precio_adicional: event.target.value }))} icon={DollarSign} />
+              <BrutalInput label="Precio Adicional" type="number" placeholder="0.00" value={formValues?.precio_adicional ?? ''} onChange={(event) => setFormValues((prev) => ({ ...prev, precio_adicional: event.target.value }))} icon={DollarSign} />
             </div>
 
-            <div className="flex flex-col gap-2 p-4 bg-amber-50 rounded-2xl border-[3px] border-amber-200">
-              <label htmlFor="rule-time-adjust" className="text-[10px] font-black uppercase tracking-widest text-amber-800">Ajuste de Tiempo</label>
-              <div className="flex items-center gap-4">
-                <input id="rule-time-adjust" type="number" className="flex-1 bg-white border-2 border-black rounded-xl p-3 font-bold" placeholder="Valor" value={formValues?.tiempo_extra_minutos ?? ''} onChange={(event) => setFormValues((prev) => ({ ...prev, tiempo_extra_minutos: event.target.value }))} />
-                <div className="flex bg-white border-2 border-black rounded-xl overflow-hidden">
-                  <button type="button" onClick={() => setFormValues((prev) => ({ ...prev, tiempo_es_porcentaje: false, precio_es_porcentaje: false }))} className={`px-4 py-3 font-black text-xs ${formValues?.tiempo_es_porcentaje ? 'hover:bg-slate-100' : 'bg-black text-white'}`}>MIN</button>
-                  <button type="button" onClick={() => setFormValues((prev) => ({ ...prev, tiempo_es_porcentaje: true, precio_es_porcentaje: true }))} className={`px-4 py-3 font-black text-xs border-l-2 border-black ${formValues?.tiempo_es_porcentaje ? 'bg-black text-white' : 'hover:bg-slate-100'}`}>%</button>
+            <div className="flex flex-col gap-3 p-6 bg-amber-50 rounded-[2rem] border-[4px] border-black shadow-[4px_4px_0px_0px_black]">
+              <label htmlFor="rule-time-adjust" className="text-sm font-black uppercase tracking-widest text-black flex items-center gap-2">
+                <Timer size={18} className="text-amber-500" /> Ajuste de Tiempo
+              </label>
+              <p className="text-[10px] font-bold text-slate-500 uppercase">Tiempo extra en minutos o porcentaje</p>
+              <div className="flex items-center gap-4 mt-2">
+                <input id="rule-time-adjust" type="number" className="flex-1 bg-white border-[3.5px] border-black rounded-2xl p-4 font-black text-lg focus:outline-none focus:-translate-y-1 focus:shadow-[4px_4px_0px_0px_var(--primary)] transition-all" placeholder="Valor" value={formValues?.tiempo_extra_minutos ?? ''} onChange={(event) => setFormValues((prev) => ({ ...prev, tiempo_extra_minutos: event.target.value }))} />
+                <div className="flex bg-white border-[3.5px] border-black rounded-2xl overflow-hidden shadow-[4px_4px_0px_0px_black]">
+                  <button type="button" onClick={() => setFormValues((prev) => ({ ...prev, tiempo_es_porcentaje: false, precio_es_porcentaje: false }))} className={`px-6 py-4 font-black text-sm uppercase transition-colors ${formValues?.tiempo_es_porcentaje ? 'hover:bg-slate-100' : 'bg-black text-white'}`}>Min</button>
+                  <button type="button" onClick={() => setFormValues((prev) => ({ ...prev, tiempo_es_porcentaje: true, precio_es_porcentaje: true }))} className={`px-6 py-4 font-black text-sm uppercase border-l-[3.5px] border-black transition-colors ${formValues?.tiempo_es_porcentaje ? 'bg-black text-white' : 'hover:bg-slate-100'}`}>%</button>
                 </div>
               </div>
             </div>
 
-            <button onClick={submitCatalog} disabled={saving} className={`mt-4 py-4 bg-[var(--secondary)] text-black border-[4px] border-black rounded-2xl font-black text-sm uppercase shadow-[6px_6px_0px_0px_black] hover:translate-y-1 hover:shadow-none transition-all disabled:opacity-70 active:scale-95`}>
-              {saving ? 'Guardando...' : 'Guardar Cambios'}
+            <button onClick={submitCatalog} disabled={saving} className={`w-full mt-4 py-5 bg-[var(--secondary)] text-black border-[4px] border-black rounded-2xl font-black text-base uppercase shadow-[6px_6px_0px_0px_black] hover:-translate-y-1 hover:shadow-[8px_8px_0px_0px_black] transition-all disabled:opacity-70 active:translate-y-2 active:shadow-none`}>
+              {saving ? 'Guardando...' : 'Guardar Regla'}
             </button>
           </div>
         )}

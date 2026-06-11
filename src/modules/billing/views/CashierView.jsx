@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import CashierPosTab from '../components/CashierPosTab';
 import CashierWebOrdersTab from '../components/CashierWebOrdersTab';
+import CashierDeliveriesTab from '../components/CashierDeliveriesTab';
+import CashierTillTab from '../components/CashierTillTab';
 import PrintReceiptModal from '../components/PrintReceiptModal';
 import { useFinanceStore } from '../hooks/useFinanceStore';
 import { useToast } from '../../../store/ToastContext';
 
 const CashierView = () => {
-  const [activeTab, setActiveTab] = useState('citas');
+  const [activeTab, setActiveTab] = useState('arqueo');
   
   // Modales de Recibo (POS)
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -24,16 +26,22 @@ const CashierView = () => {
     posProducts,
     isLoadingPos,
     loadPosData,
-    handlePosPayment
+    handlePosPayment,
+
+    allOrders,
+    isLoadingAllOrders,
+    loadAllOrders,
+    handleDeliverOrder
   } = useFinanceStore();
   
   const { addToast } = useToast();
 
   useEffect(() => {
-    // Cargar pedidos web pendientes y citas del POS al montar
+    // Cargar pedidos web pendientes, citas del POS y entregas al montar
     loadPendingOrders();
     loadPosData();
-  }, [loadPendingOrders, loadPosData]);
+    loadAllOrders();
+  }, [loadPendingOrders, loadPosData, loadAllOrders]);
 
   const handleShowReceipt = (invoice) => {
     setGeneratedInvoice(invoice);
@@ -82,6 +90,14 @@ const CashierView = () => {
       {/* TABS */}
       <div className="flex gap-4 mb-6 border-b-4 border-black pb-4 overflow-x-auto no-scrollbar">
         <button 
+          onClick={() => setActiveTab('arqueo')}
+          className={`px-6 py-3 border-[3.5px] border-black rounded-2xl font-black uppercase text-xs transition-all cursor-pointer whitespace-nowrap flex items-center gap-2 ${
+            activeTab === 'arqueo' ? 'bg-indigo-400 text-white shadow-[4px_4px_0px_0px_black]' : 'bg-white hover:bg-slate-100'
+          }`}
+        >
+          Arqueo de Caja
+        </button>
+        <button 
           onClick={() => setActiveTab('citas')}
           className={`px-6 py-3 border-[3.5px] border-black rounded-2xl font-black uppercase text-xs transition-all cursor-pointer whitespace-nowrap ${
             activeTab === 'citas' ? 'bg-[var(--primary)] text-white shadow-[4px_4px_0px_0px_black]' : 'bg-white hover:bg-slate-100'
@@ -102,10 +118,25 @@ const CashierView = () => {
             </span>
           )}
         </button>
+        <button 
+          onClick={() => setActiveTab('entregas')}
+          className={`px-6 py-3 border-[3.5px] border-black rounded-2xl font-black uppercase text-xs transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'entregas' ? 'bg-emerald-400 text-black shadow-[4px_4px_0px_0px_black]' : 'bg-white hover:bg-slate-100'
+          }`}
+        >
+          📦 Entregar Pedidos
+          {allOrders.filter(o => o.estado_pago === 'completado' && o.estado_pedido !== 'entregado').length > 0 && (
+            <span className="bg-rose-500 text-white px-2 py-0.5 rounded-full text-[10px] border-2 border-black animate-pulse">
+              {allOrders.filter(o => o.estado_pago === 'completado' && o.estado_pedido !== 'entregado').length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* RENDERIZADO DEL TAB ACTIVO */}
-      {activeTab === 'citas' ? (
+      {activeTab === 'arqueo' ? (
+        <CashierTillTab />
+      ) : activeTab === 'citas' ? (
         <CashierPosTab 
           pendingBookings={pendingPosBookings}
           productsCatalog={posProducts}
@@ -113,12 +144,19 @@ const CashierView = () => {
           onShowReceipt={handleShowReceipt}
           onProcessPayment={handlePosPayment}
         />
-      ) : (
+      ) : activeTab === 'pedidos' ? (
         <CashierWebOrdersTab 
           webOrders={pendingOrders}
           isLoading={isLoadingOrders}
           onValidateOrder={handleValidateOrder}
           onRefresh={loadPendingOrders}
+        />
+      ) : (
+        <CashierDeliveriesTab 
+          orders={allOrders}
+          isLoading={isLoadingAllOrders}
+          onDeliverOrder={(id) => handleDeliverOrder(id, addToast)}
+          onRefresh={loadAllOrders}
         />
       )}
 

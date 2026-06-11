@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components, react-hooks/set-state-in-effect, no-unused-vars */
-import { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import { supabase } from '../api/supabase';
 import { useAuth } from './AuthContext';
@@ -7,19 +7,59 @@ import { useToast } from './ToastContext';
 
 const NotificationContext = createContext();
 
+// ─── Helpers para Notificaciones Nativas del navegador ──────────────────────
+
+const getNativePermission = () => {
+  if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+  return Notification.permission; // 'default' | 'granted' | 'denied'
+};
+
+const sendNativeNotification = (title, body, icon) => {
+  if (getNativePermission() !== 'granted') return;
+  // Solo mostrar si la página NO está visible (usuario en otra pestaña / pantalla apagada)
+  if (document.visibilityState === 'visible') return;
+
+  try {
+    const notif = new Notification(title, {
+      body,
+      icon: icon || '/pwa-192x192.png',
+      badge: '/pwa-192x192.png',
+      tag: `moopsic-${Date.now()}`,
+      vibrate: [200, 100, 200],
+      requireInteraction: false,
+    });
+
+    notif.onclick = () => {
+      window.focus();
+      notif.close();
+    };
+
+    // Auto-cerrar después de 8 segundos
+    setTimeout(() => notif.close(), 8000);
+  } catch (err) {
+    // En iOS Safari y algunos navegadores, new Notification() puede fallar si no es desde un SW
+    console.warn('[Notifications] Error sending native notification:', err);
+  }
+};
+
+// ─── Provider ───────────────────────────────────────────────────────────────
+
 export const NotificationProvider = ({ children }) => {
   const { isAuthenticated, currentUser } = useAuth();
   const { showToast } = useToast();
   
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [nativePermission, setNativePermission] = useState(getNativePermission());
+
+  // Para evitar notifs duplicadas en el primer mount
+  const hasInitialized = useRef(false);
 
   const fetchNotifications = useCallback(async () => {
     if (!isAuthenticated || !currentUser) return;
     
     setLoading(true);
     try {
-      // The RLS policy handles returning only the user's notifications or their role's notifications
       const { data, error } = await supabase
         .from('notificaciones')
         .select('*')
@@ -35,11 +75,54 @@ export const NotificationProvider = ({ children }) => {
     }
   }, [isAuthenticated, currentUser]);
 
+  // ─── Solicitar Permiso de Notificaciones Nativas ────────────────────────
+  const requestNotificationPermission = useCallback(async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setNativePermission('unsupported');
+      return 'unsupported';
+    }
+
+    if (Notification.permission === 'granted') {
+      setNativePermission('granted');
+      return 'granted';
+    }
+
+    if (Notification.permission === 'denied') {
+      setNativePermission('denied');
+      return 'denied';
+    }
+
+    try {
+      const result = await Notification.requestPermission();
+      setNativePermission(result);
+      return result;
+    } catch (err) {
+      console.error('[NotificationContext] Error requesting permission:', err);
+      setNativePermission('denied');
+      return 'denied';
+    }
+  }, []);
+
+  // Auto-solicitar permiso al autenticarse (solo una vez)
+  useEffect(() => {
+    if (isAuthenticated && currentUser && !hasInitialized.current) {
+      hasInitialized.current = true;
+      // Pedir permiso en silencio después de un breve delay (mejor UX)
+      const timer = setTimeout(() => {
+        if (getNativePermission() === 'default') {
+          requestNotificationPermission();
+        }
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, currentUser, requestNotificationPermission]);
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchNotifications();
     } else {
       setNotifications([]);
+      hasInitialized.current = false;
     }
   }, [isAuthenticated, fetchNotifications]);
 
@@ -47,7 +130,6 @@ export const NotificationProvider = ({ children }) => {
   useEffect(() => {
     if (!isAuthenticated || !currentUser) return;
 
-    // We subscribe to the whole table, RLS automatically filters the events sent to this user
     const channel = supabase.channel('realtime:notificaciones')
       .on(
         'postgres_changes',
@@ -57,13 +139,19 @@ export const NotificationProvider = ({ children }) => {
             const newNotif = payload.new;
             setNotifications((prev) => [newNotif, ...prev]);
             
-            // Show toast visually
-            // Map types to toast colors
+            // Show in-app toast
             let toastType = 'info';
             if (newNotif.tipo === 'stock' || newNotif.tipo === 'seguridad' || newNotif.tipo === 'encuesta') toastType = 'warning';
             if (newNotif.tipo === 'pago') toastType = 'success';
             
             showToast(newNotif.titulo, toastType);
+
+            // 🔔 Enviar notificación nativa del navegador/teléfono
+            sendNativeNotification(
+              newNotif.titulo || 'BubblePet Spa',
+              newNotif.mensaje || 'Tienes una nueva notificación',
+              '/pwa-192x192.png'
+            );
           } else if (payload.eventType === 'UPDATE') {
             setNotifications((prev) => 
               prev.map(n => n.id === payload.new.id ? payload.new : n)
@@ -83,7 +171,6 @@ export const NotificationProvider = ({ children }) => {
   }, [isAuthenticated, currentUser, showToast]);
 
   const markAsRead = async (id) => {
-    // Optimistic update
     setNotifications((prev) => prev.map(n => n.id === id ? { ...n, leido: true } : n));
     try {
       const { error } = await supabase
@@ -93,7 +180,6 @@ export const NotificationProvider = ({ children }) => {
       if (error) throw error;
     } catch (err) {
       console.error('[NotificationContext] Error marking as read:', err);
-      // Revert if error
       fetchNotifications();
     }
   };
@@ -140,7 +226,10 @@ export const NotificationProvider = ({ children }) => {
         markAsRead,
         markAllAsRead,
         deleteNotification,
-        refetchNotifications: fetchNotifications
+        refetchNotifications: fetchNotifications,
+        // PWA Push Notifications
+        nativePermission,
+        requestNotificationPermission,
       }}
     >
       {children}

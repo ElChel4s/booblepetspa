@@ -132,8 +132,9 @@ const CheckoutModal = ({
         </div>
 
         {/* MITAD DERECHA: RECOMENDACIONES POST-ESTÉTICA */}
-        <div className="w-full md:w-1/2 p-6 md:p-10 bg-white flex flex-col justify-center">
-          <div className="bg-purple-100 border-[4px] border-black rounded-[2rem] p-6 shadow-[6px_6px_0px_0px_black] mb-8 relative">
+        <div className="w-full md:w-1/2 p-6 md:p-10 bg-white flex flex-col justify-center gap-6 overflow-y-auto max-h-[85vh] custom-scrollbar">
+          {/* Recomendaciones Post-Estética */}
+          <div className="bg-purple-100 border-[4px] border-black rounded-[2rem] p-6 shadow-[6px_6px_0px_0px_black] relative mt-4">
             <div className="absolute -top-5 -left-5 bg-white border-[4px] border-black rounded-full p-2 shadow-[4px_4px_0px_0px_black] rotate-[-10deg]">
               <Heart size={32} className="text-rose-500 fill-current" />
             </div>
@@ -147,6 +148,44 @@ const CheckoutModal = ({
                 <span className="text-slate-400 italic">El groomer no dejó recomendaciones post-servicio para esta visita.</span>
               )}
             </div>
+          </div>
+
+          {/* Insumos Utilizados */}
+          <div className="bg-slate-50 border-[4px] border-black rounded-[2rem] p-6 shadow-[6px_6px_0px_0px_black] relative">
+            <h3 className="font-black text-xl uppercase mb-2">Reflejando Insumos</h3>
+            <p className="text-[10px] font-black uppercase text-emerald-600 tracking-wider mb-4 border-b-2 border-black/10 pb-2">
+              Ingresados manualmente por el groomer
+            </p>
+            
+            {checkoutData.loadingInsumos ? (
+              <div className="text-center py-4 font-bold text-slate-400 uppercase tracking-widest text-xs">
+                Cargando insumos...
+              </div>
+            ) : checkoutData.insumosUsados && checkoutData.insumosUsados.length > 0 ? (
+              <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1 custom-scrollbar">
+                {checkoutData.insumosUsados.map((ins, i) => (
+                  <div key={i} className="text-xs font-black uppercase bg-white border-2 border-black p-3 rounded-xl flex items-center justify-between shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                    <span className="truncate pr-2 text-slate-800">{ins.nombre}</span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="px-2 py-0.5 bg-slate-100 border border-black rounded font-black text-black">
+                        {ins.cantidad} ud
+                      </span>
+                      {ins.abrio_nuevo ? (
+                        <span className="px-1.5 py-0.5 bg-amber-400 text-black text-[9px] font-black border border-black rounded">
+                          ENV. NUEVO
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 bg-slate-100 text-[9px] font-black text-slate-400 border border-black rounded">
+                          COMPARTIDO
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs font-bold text-slate-400 italic">No se registraron insumos en este servicio.</p>
+            )}
           </div>
 
           <div className="bg-slate-50 border-[3px] border-black border-dashed rounded-2xl p-5">
@@ -180,6 +219,8 @@ CheckoutModal.propTypes = {
     modificadores_aplicados: PropTypes.array.isRequired,
     total_calculado: PropTypes.number.isRequired,
     recomendaciones_post: PropTypes.string,
+    insumosUsados: PropTypes.array,
+    loadingInsumos: PropTypes.bool
   }),
   billingForm: PropTypes.shape({
     nit_ci: PropTypes.string.isRequired,

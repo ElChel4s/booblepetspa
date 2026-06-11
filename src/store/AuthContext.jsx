@@ -25,7 +25,12 @@ export const AuthProvider = ({ children }) => {
           console.log('[AuthContext] checkSession result:', { user, error });
           
           if (error || !user) {
-             console.error('[AuthContext] Session invalid or error occurred:', error);
+             // El error 'Auth session missing!' es normal cuando se entra como invitado (no autenticado)
+             if (error && error.message !== 'Auth session missing!') {
+                console.error('[AuthContext] Session invalid or error occurred:', error);
+             } else {
+                console.log('[AuthContext] No se encontró sesión activa (Modo Invitado).');
+             }
              // Si hay un error de sesión (como 403), limpiamos el estado local
              if (error?.status === 403 || error?.message?.includes('403')) {
                 await authService.logout();

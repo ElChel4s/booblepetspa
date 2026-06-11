@@ -170,6 +170,7 @@ export const approveTriageAlert = async (citaId, tipoAlert, precioSugerido = 50)
       cita_id: citaId,
       modificador_id: modifierId,
       precio_aplicado: precio,
+      estado_aprobacion: 'aprobado',
     });
 
   if (insertError) return { error: insertError };

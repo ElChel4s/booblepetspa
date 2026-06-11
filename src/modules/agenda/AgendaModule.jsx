@@ -34,39 +34,39 @@ const ROLE_TABS = {
 const AgendaModule = () => {
   const { rolActual, currentUser } = useAuth();
   const [activeTab, setActiveTab] = useState(ROLE_TABS[rolActual]?.[0]?.id || 'calendario');
-  const { data: agendaData, loading, error, selectedDate, setSelectedDate, refresh } = useAgendaData({
-    role: rolActual,
-    userId: currentUser?.id,
-  });
-
-  const tabs = useMemo(() => ROLE_TABS[rolActual] || ROLE_TABS.cliente, [rolActual]);
-  const shellTabs = rolActual === 'recepcion' ? [] : tabs;
-
-  useEffect(() => {
-    setActiveTab(ROLE_TABS[rolActual]?.[0]?.id || 'calendario');
-  }, [rolActual]);
-
-  const content = (() => {
-    if (rolActual === 'admin') {
-      return <AdminAgendaView activeTab={activeTab} agendaData={agendaData} loading={loading} error={error} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onRefresh={refresh} currentUser={currentUser} />;
-    }
-    if (rolActual === 'recepcion') {
-      return (
-        <ReceptionAgendaView
-          activeTab={activeTab}
-          onChangeTab={setActiveTab}
-          agendaData={agendaData}
-          loading={loading}
-          error={error}
-          selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
-          onRefresh={refresh}
-        />
-      );
-    }
-    if (rolActual === 'groomer') {
-      return <GroomerAgendaView activeTab={activeTab} agendaData={agendaData} loading={loading} error={error} currentUser={currentUser} onRefresh={refresh} />;
-    }
+    const { data: agendaData, loading, error, selectedDate, setSelectedDate, refresh, updateOptimistically } = useAgendaData({
+      role: rolActual,
+      userId: currentUser?.id,
+    });
+  
+    const tabs = useMemo(() => ROLE_TABS[rolActual] || ROLE_TABS.cliente, [rolActual]);
+    const shellTabs = rolActual === 'recepcion' ? [] : tabs;
+  
+    useEffect(() => {
+      setActiveTab(ROLE_TABS[rolActual]?.[0]?.id || 'calendario');
+    }, [rolActual]);
+  
+    const content = (() => {
+      if (rolActual === 'admin') {
+        return <AdminAgendaView activeTab={activeTab} agendaData={agendaData} loading={loading} error={error} selectedDate={selectedDate} setSelectedDate={setSelectedDate} onRefresh={refresh} currentUser={currentUser} />;
+      }
+      if (rolActual === 'recepcion') {
+        return (
+          <ReceptionAgendaView
+            activeTab={activeTab}
+            onChangeTab={setActiveTab}
+            agendaData={agendaData}
+            loading={loading}
+            error={error}
+            selectedDate={selectedDate}
+            setSelectedDate={setSelectedDate}
+            onRefresh={refresh}
+          />
+        );
+      }
+      if (rolActual === 'groomer') {
+        return <GroomerAgendaView activeTab={activeTab} agendaData={agendaData} loading={loading} error={error} currentUser={currentUser} onRefresh={refresh} updateOptimistically={updateOptimistically} />;
+      }
     return <ClientAgendaView activeTab={activeTab} agendaData={agendaData} loading={loading} error={error} />;
   })();
 

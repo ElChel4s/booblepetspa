@@ -37,11 +37,19 @@ const FALLBACK_RESERVATIONS = [
 ];
 
 export function getTodayISODate() {
-  return new Date().toISOString().slice(0, 10);
+  const date = new Date();
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
-const startOfDayISO = (date) => `${date}T00:00:00.000Z`;
-const endOfDayISO = (date) => `${date}T23:59:59.999Z`;
+const startOfDayISO = (date) => {
+  return new Date(`${date}T00:00:00`).toISOString();
+};
+const endOfDayISO = (date) => {
+  return new Date(`${date}T23:59:59.999`).toISOString();
+};
 
 const safeArray = (value) => (Array.isArray(value) ? value : []);
 
@@ -81,12 +89,19 @@ export const loadAgendaData = async ({ role, userId, date }) => {
   const dayStart = startOfDayISO(date);
   const dayEnd = endOfDayISO(date);
 
+  const dateObj = new Date(date + 'T12:00:00');
+  const y = dateObj.getFullYear();
+  const m = dateObj.getMonth();
+  const startOfMonth = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+  const lastDay = new Date(y, m + 1, 0).getDate();
+  const endOfMonth = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
   const [servicesRes, modifiersRes, groomersRes, schedulesRes, exceptionsRes, appointmentsRes, reservationsRes] = await Promise.all([
     supabase.from('servicios').select('id, nombre, duracion_base_minutos, precio_base, categoria, icon_name').order('nombre', { ascending: true }),
     supabase.from('modificadores_servicio').select('id, servicio_id, criterio, valor, tiempo_extra_minutos, precio_adicional, precio_es_porcentaje, tiempo_es_porcentaje, icon_name').order('criterio', { ascending: true }),
     supabase.from('perfiles').select('id, nombre_completo, avatar_url, activo, rol').eq('rol', 'groomer').eq('activo', true).order('nombre_completo', { ascending: true }),
     scopeGroomerQuery(supabase.from('horarios_base_groomer').select('id, groomer_id, dia_semana, hora_inicio, hora_fin').order('dia_semana', { ascending: true }), role, userId),
-    scopeGroomerExceptionsQuery(supabase.from('excepciones_agenda').select('id, tipo, groomer_id, fecha_efectiva, todo_el_dia, hora_inicio, hora_fin, motivo, detalle_opcional').eq('fecha_efectiva', date).order('tipo', { ascending: true }), role, userId),
+    scopeGroomerExceptionsQuery(supabase.from('excepciones_agenda').select('id, tipo, groomer_id, fecha_efectiva, todo_el_dia, hora_inicio, hora_fin, motivo, detalle_opcional').gte('fecha_efectiva', startOfMonth).lte('fecha_efectiva', endOfMonth).order('tipo', { ascending: true }), role, userId),
     scopeGroomerQuery(supabase.from('citas').select('id, reserva_id, mascota_id, groomer_id, servicio_id, fecha_hora_inicio, fecha_hora_fin, estado, notas_cliente, sugerencia_groomer_id, sugerencia_fecha_hora_inicio, sugerencia_fecha_hora_fin, propuesta_mensaje, estado_propuesta, rechazo_mensaje').gte('fecha_hora_inicio', dayStart).lte('fecha_hora_inicio', dayEnd).order('fecha_hora_inicio', { ascending: true }), role, userId),
     supabase.from('reservas').select('id, cliente_id, fecha_creacion, estado_general, total_reserva, nombre_invitado, telefono_invitado').gte('fecha_creacion', dayStart).lte('fecha_creacion', dayEnd),
   ]);
@@ -145,7 +160,7 @@ export const loadAgendaData = async ({ role, userId, date }) => {
     : { data: [], error: null };
 
   const appliedModifiersRes = data.appointments.length
-    ? await supabase.from('cita_modificadores_aplicados').select('id, cita_id, modificador_id, precio_aplicado, modificador:modificadores_servicio(id, criterio, valor, tiempo_extra_minutos, precio_adicional, precio_es_porcentaje, tiempo_es_porcentaje, icon_name)').in('cita_id', data.appointments.map((appointment) => appointment.id))
+    ? await supabase.from('cita_modificadores_aplicados').select('id, cita_id, modificador_id, precio_aplicado, estado_aprobacion, modificador:modificadores_servicio(id, criterio, valor, tiempo_extra_minutos, precio_adicional, precio_es_porcentaje, tiempo_es_porcentaje, icon_name)').in('cita_id', data.appointments.map((appointment) => appointment.id))
     : { data: [], error: null };
 
   const groomerById = mapById(data.groomers);
@@ -164,7 +179,7 @@ export const loadAgendaData = async ({ role, userId, date }) => {
   }, {});
   const modifiersByCitaId = safeArray(appliedModifiersRes.data).reduce((accumulator, item) => {
     if (!accumulator[item.cita_id]) accumulator[item.cita_id] = [];
-    accumulator[item.cita_id].push(item.modificador ? { ...item.modificador, precio_aplicado: item.precio_aplicado } : item);
+    accumulator[item.cita_id].push(item.modificador ? { ...item.modificador, applied_id: item.id, precio_aplicado: item.precio_aplicado, estado_aprobacion: item.estado_aprobacion } : item);
     return accumulator;
   }, {});
   const normalizedAppointments = data.appointments.map((appointment) => ({

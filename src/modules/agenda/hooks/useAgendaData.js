@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { loadAgendaData, getTodayISODate } from '../services/agendaService';
+import { supabase } from '../../../api/supabase';
 
 export const useAgendaData = ({ role, userId }) => {
   const [selectedDate, setSelectedDate] = useState(getTodayISODate());
@@ -31,6 +32,51 @@ export const useAgendaData = ({ role, userId }) => {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('agenda-realtime-sync')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'cita_modificadores_aplicados'
+        },
+        () => {
+          refresh();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'citas'
+        },
+        () => {
+          refresh();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'fichas_grooming'
+        },
+        () => {
+          refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refresh]);
+
   return {
     data,
     loading,
@@ -38,5 +84,9 @@ export const useAgendaData = ({ role, userId }) => {
     selectedDate,
     setSelectedDate,
     refresh,
+    updateOptimistically: (updater) => setData(prev => {
+      if (!prev) return prev;
+      return updater(prev);
+    })
   };
 };

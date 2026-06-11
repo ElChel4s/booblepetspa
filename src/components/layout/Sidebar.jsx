@@ -36,6 +36,7 @@ const NAV_BY_ROLE = {
     { id: 'audit', icon: <History />, label: 'Auditoría' },
   ],
   recepcion: [
+    { id: 'reports', icon: <BarChart3 />, label: 'Inicio' },
     { id: 'agenda', icon: <Calendar />, label: 'Agenda' },
     { id: 'inventory', icon: <Package />, label: 'Ventas/POS' },
     { id: 'clients', icon: <Users />, label: 'Clientes' },

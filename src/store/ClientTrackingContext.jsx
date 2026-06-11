@@ -150,13 +150,20 @@ export const ClientTrackingProvider = ({ children }) => {
       const pendingMods = modsRes.data || [];
       if (pendingMods.length > 0) {
         const mod = pendingMods[0]; // Mostrar el primero
+        const isExtraService = mod.modificador?.valor === 'Servicio Adicional';
+        const serviceName = mod.modificador?.criterio || 'Servicio';
+        const mascotaNombre = activeCitaData.mascota?.nombre || 'tu mascota';
+
         setAlertaExtra({
           id: mod.id,
           concepto: mod.concepto_snap || mod.modificador?.criterio || 'Tratamiento adicional recomendado',
           precio: Number(mod.precio_aplicado || mod.modificador?.precio_adicional || 0),
           tiempoExtra: Number(mod.modificador?.tiempo_extra_minutos || 0),
-          evidencia: mod.url_evidencia || 'https://images.unsplash.com/photo-1517849845537-4d257902454a?w=400&h=300&fit=crop',
-          mensaje: `Hemos detectado una incidencia médica / de estética en ${activeCitaData.mascota?.nombre}. El groomer sugiere un tratamiento adicional para un mejor resultado.`
+          evidencia: mod.url_evidencia || null,
+          titulo: isExtraService ? 'Servicio Extra Sugerido' : 'Tratamiento Recomendado',
+          mensaje: isExtraService
+            ? `El groomer sugiere añadir el servicio adicional de "${serviceName}" para consentir y mejorar la sesión de ${mascotaNombre}. ¿Deseas aprobar este servicio adicional?`
+            : `Hemos detectado una incidencia de tipo "${serviceName}" para ${mascotaNombre}. El groomer sugiere un tratamiento adicional para un mejor resultado.`
         });
       } else {
         setAlertaExtra(null);
@@ -205,7 +212,7 @@ export const ClientTrackingProvider = ({ children }) => {
         showToast('Error al aprobar el tratamiento', 'error');
         return;
       }
-      
+
       const concepto = alertaExtra?.concepto || 'Tratamiento';
       await createAuditLog(currentUser.id, `Aprobó tratamiento adicional: ${concepto} para cita ${activeCita.id}`);
       showToast('Tratamiento autorizado correctamente', 'success');
@@ -249,7 +256,7 @@ export const ClientTrackingProvider = ({ children }) => {
       showToast('¡Gracias por tus comentarios!', 'success');
       setShowCheckoutModal(false);
       setShowLiveTrackingOverlay(false);
-      
+
       // Esperar brevemente para refrescar y borrar la cita del tracking activo
       await refreshTracking();
     } catch (err) {

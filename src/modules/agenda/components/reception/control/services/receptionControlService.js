@@ -62,10 +62,166 @@ export const getCitaModificadores = async (citaIds) => {
       id,
       cita_id,
       precio_aplicado,
+      estado_aprobacion,
       modificador:modificadores_servicio(id, criterio, valor)
     `)
     .in('cita_id', citaIds);
 };
+
+/**
+ * Agrega los pasos de un servicio adicional al checklist de la ficha de la cita.
+ */
+export const addExtraServiceStepsToChecklist = async (citaId, serviceName) => {
+  if (!supabase) return { error: new Error('Supabase no configurado') };
+  try {
+    const { data: ficha, error: fichaError } = await supabase
+      .from('fichas_grooming')
+      .select('id')
+      .eq('cita_id', citaId)
+      .maybeSingle();
+
+    if (fichaError) throw fichaError;
+    if (!ficha) return { error: new Error('No se encontró ficha_grooming') };
+
+    const fichaId = ficha.id;
+
+    const { data: servicio, error: servicioError } = await supabase
+      .from('servicios')
+      .select('id')
+      .eq('nombre', serviceName)
+      .maybeSingle();
+
+    if (servicioError) throw servicioError;
+    if (!servicio) return { error: new Error(`No se encontró servicio: ${serviceName}`) };
+
+    const { data: pasos, error: pasosError } = await supabase
+      .from('pasos_servicio')
+      .select('tarea_id')
+      .eq('servicio_id', servicio.id)
+      .order('orden', { ascending: true });
+
+    if (pasosError) throw pasosError;
+    if (!pasos || pasos.length === 0) return { data: [], error: null };
+
+    const { data: checklistExistente, error: chkError } = await supabase
+      .from('checklist_seguimiento')
+      .select('tarea_id')
+      .eq('ficha_id', fichaId);
+
+    if (chkError) throw chkError;
+    const tareasExistentes = new Set(checklistExistente?.map(item => item.tarea_id) || []);
+
+    const nuevosPasos = pasos.filter(p => !tareasExistentes.has(p.tarea_id));
+    if (nuevosPasos.length === 0) return { data: [], error: null };
+
+    const inserts = nuevosPasos.map(p => ({
+      ficha_id: fichaId,
+      tarea_id: p.tarea_id,
+      completado: false,
+      observacion_item: ''
+    }));
+
+    const { data: insertedData, error: insertError } = await supabase
+      .from('checklist_seguimiento')
+      .insert(inserts)
+      .select();
+
+    if (insertError) throw insertError;
+
+    return { data: insertedData, error: null };
+  } catch (err) {
+    console.error(`[receptionControlService - addExtraServiceStepsToChecklist] error para ${serviceName}:`, err);
+    return { error: err };
+  }
+};
+
+/**
+ * Actualizar el estado de aprobación de un modificador aplicado.
+ */
+export const updateCitaModifierStatus = async (appliedModifierId, newStatus) => {
+  if (!supabase) return { error: new Error('Supabase no configurado') };
+  try {
+    // 1. Obtener cita_id y criterio del modificador antes de actualizar
+    const { data: appliedMod, error: getError } = await supabase
+      .from('cita_modificadores_aplicados')
+      .select(`
+        cita_id,
+        modificador:modificadores_servicio(criterio, valor)
+      `)
+      .eq('id', appliedModifierId)
+      .maybeSingle();
+
+    if (getError) throw getError;
+    if (!appliedMod) throw new Error('Modificador no encontrado');
+
+    const citaId = appliedMod.cita_id;
+    const isExtraService = appliedMod.modificador?.valor === 'Servicio Adicional';
+    const serviceName = appliedMod.modificador?.criterio;
+
+    // 2. Actualizar estado
+    const { data, error } = await supabase
+      .from('cita_modificadores_aplicados')
+      .update({ estado_aprobacion: newStatus })
+      .eq('id', appliedModifierId)
+      .select();
+
+    if (error) throw error;
+
+    // 3. Si es aprobado y es servicio adicional, agregar pasos
+    if (newStatus === 'aprobado' && isExtraService && serviceName) {
+      await addExtraServiceStepsToChecklist(citaId, serviceName);
+    }
+
+    // 4. Crear notificaciones para el groomer y cliente
+    const { data: cita } = await supabase
+      .from('citas')
+      .select('groomer_id, mascota:mascotas(nombre, dueno_id)')
+      .eq('id', citaId)
+      .maybeSingle();
+
+    if (cita) {
+      const mascotaNombre = cita.mascota?.nombre || 'la mascota';
+      
+      // Notificar al groomer
+      if (cita.groomer_id) {
+        await supabase
+          .from('notificaciones')
+          .insert({
+            usuario_id: cita.groomer_id,
+            rol_destino: 'groomer',
+            titulo: newStatus === 'aprobado' ? 'Servicio Adicional Aprobado' : 'Servicio Adicional Rechazado',
+            mensaje: newStatus === 'aprobado'
+              ? `Recepción aprobó "${serviceName}" para ${mascotaNombre}. Se añadieron las tareas al checklist.`
+              : `Recepción rechazó "${serviceName}" para ${mascotaNombre}.`,
+            tipo: 'ficha',
+            link_modulo: '/groomer/agenda'
+          });
+      }
+
+      // Notificar al cliente
+      if (cita.mascota?.dueno_id) {
+        await supabase
+          .from('notificaciones')
+          .insert({
+            usuario_id: cita.mascota.dueno_id,
+            rol_destino: 'cliente',
+            titulo: newStatus === 'aprobado' ? 'Servicio Adicional Confirmado' : 'Servicio Adicional Cancelado',
+            mensaje: newStatus === 'aprobado'
+              ? `Se ha aprobado la adición de "${serviceName}" para ${mascotaNombre}.`
+              : `Se ha rechazado la adición de "${serviceName}" para ${mascotaNombre}.`,
+            tipo: 'cita',
+            link_modulo: '/cliente/citas'
+          });
+      }
+    }
+
+    return { data, error: null };
+  } catch (err) {
+    console.error('[receptionControlService] updateCitaModifierStatus error:', err);
+    return { error: err };
+  }
+};
+
 
 /**
  * Dar ingreso a una mascota (cambiar estado a 'en_proceso' o 'en_espera').

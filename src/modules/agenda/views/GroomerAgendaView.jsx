@@ -8,6 +8,7 @@ import GroomerFocusZone from '../components/groomer/GroomerFocusZone';
 import GroomerTimeline from '../components/groomer/GroomerTimeline';
 import GroomerFichaModal from '../components/groomer/GroomerFichaModal';
 import GroomerScheduleManager from '../components/groomer/GroomerScheduleManager';
+import GroomerFinishModal from '../components/groomer/GroomerFinishModal';
 
 import GroomerWorkspace from '../components/groomer/workspace/GroomerWorkspace';
 import GroomerHistoryCard from '../components/groomer/workspace/GroomerHistoryCard';
@@ -21,7 +22,7 @@ import {
   initFichaAndChecklist,
 } from '../services/groomerAgendaService';
 
-const GroomerAgendaView = ({ activeTab, agendaData, loading, currentUser, onRefresh }) => {
+const GroomerAgendaView = ({ activeTab, agendaData, loading, currentUser, onRefresh, updateOptimistically }) => {
   const appointments = agendaData?.appointments || [];
   const schedules = agendaData?.schedules || [];
   const fichas = agendaData?.fichas || [];
@@ -63,6 +64,7 @@ const GroomerAgendaView = ({ activeTab, agendaData, loading, currentUser, onRefr
   const { showToast } = useToast();
   const [fichaModalOpen, setFichaModalOpen] = useState(false);
   const [selectedCita, setSelectedCita] = useState(null);
+  const [finishingCitaId, setFinishingCitaId] = useState(null);
   const [saving, setSaving] = useState(false);
   const [viewingHistory, setViewingHistory] = useState(null);
 
@@ -80,9 +82,20 @@ const GroomerAgendaView = ({ activeTab, agendaData, loading, currentUser, onRefr
 
   const handleStart = async (citaId) => {
     setSaving(true);
+    // Optimistic Update
+    if (updateOptimistically) {
+      updateOptimistically(prev => {
+        const newAppointments = prev.appointments.map(app => 
+          app.id === citaId ? { ...app, estado: 'en_proceso' } : app
+        );
+        return { ...prev, appointments: newAppointments };
+      });
+    }
+
     const startRes = await startAppointment(citaId);
     if (startRes.error) {
       showToast(startRes.error.message || 'No se pudo iniciar el servicio', 'error');
+      if (onRefresh) await onRefresh(); // Revert on error
       setSaving(false);
       return;
     }
@@ -98,11 +111,32 @@ const GroomerAgendaView = ({ activeTab, agendaData, loading, currentUser, onRefr
     setSaving(false);
   };
 
-  const handlePause = (citaId) =>
-    runAppointmentAction(() => pauseAppointment(citaId), 'Servicio pausado');
+  const handlePause = async (citaId) => {
+    setSaving(true);
+    if (updateOptimistically) {
+      updateOptimistically(prev => ({
+        ...prev,
+        appointments: prev.appointments.map(app => app.id === citaId ? { ...app, estado: 'pausada' } : app)
+      }));
+    }
+    const res = await pauseAppointment(citaId);
+    if (res?.error) {
+      showToast(res.error.message || 'No se pudo pausar', 'error');
+      if (onRefresh) await onRefresh();
+    } else {
+      showToast('Servicio pausado', 'success');
+      if (onRefresh) await onRefresh();
+    }
+    setSaving(false);
+  };
 
-  const handleFinish = (citaId) =>
-    runAppointmentAction(() => finishAppointment(citaId), 'Servicio finalizado');
+  const handleFinish = (citaId) => {
+    setFinishingCitaId(citaId);
+  };
+
+  const activeAppForModal = finishingCitaId 
+    ? currentAppointments.find(a => a.id === finishingCitaId) 
+    : null;
 
   const handleOpenFicha = (cita) => {
     setSelectedCita(cita);
@@ -119,15 +153,27 @@ const GroomerAgendaView = ({ activeTab, agendaData, loading, currentUser, onRefr
   };
 
   const handleToggleChecklistItem = async (itemId, currentCompleted) => {
-    setSaving(true);
-    const result = await toggleChecklistItem(itemId, !currentCompleted);
+    // No bloqueamos todo con setSaving(true) para checklist, para que sea instantáneo y no moleste
+    const newValue = !currentCompleted;
+    if (updateOptimistically) {
+      updateOptimistically(prev => {
+        const newAppointments = prev.appointments.map(app => {
+          if (!app.checklist) return app;
+          const newChecklist = app.checklist.map(c => c.id === itemId ? { ...c, completado: newValue } : c);
+          return { ...app, checklist: newChecklist };
+        });
+        return { ...prev, appointments: newAppointments };
+      });
+    }
+
+    const result = await toggleChecklistItem(itemId, newValue);
     if (result.error) {
       showToast('No se pudo actualizar la tarea', 'error');
-    } else {
-      showToast('Tarea actualizada', 'success');
       if (onRefresh) await onRefresh();
+    } else {
+      // Optamos por no hacer toast en checklist para no hacer spam visual, 
+      // y no recargamos de inmediato para mantener la rapidez.
     }
-    setSaving(false);
   };
 
   if (viewingHistory) {
@@ -141,8 +187,10 @@ const GroomerAgendaView = ({ activeTab, agendaData, loading, currentUser, onRefr
 
   const serviceModifiers = useMemo(() => {
     if (!activeAppointment) return [];
+    const dynamicRuleCategories = ['Tamaño', 'Temperamento', 'Estado Pelaje', 'Pelaje', 'Alergias', 'Comportamiento'];
     return (agendaData?.modifiers || []).filter(
-      (mod) => !mod.servicio_id || mod.servicio_id === activeAppointment.servicio_id
+      (mod) => (!mod.servicio_id || mod.servicio_id === activeAppointment.servicio_id) &&
+               !dynamicRuleCategories.includes(mod.valor)
     );
   }, [agendaData?.modifiers, activeAppointment]);
 
@@ -563,6 +611,15 @@ const GroomerAgendaView = ({ activeTab, agendaData, loading, currentUser, onRefr
         saving={saving}
       />
 
+      <GroomerFinishModal
+        isOpen={!!finishingCitaId}
+        onClose={() => setFinishingCitaId(null)}
+        activeApp={activeAppForModal}
+        currentUser={currentUser}
+        onRefresh={onRefresh}
+        updateOptimistically={updateOptimistically}
+      />
+
       {/* Minimized Workspace Floating Bar */}
       {activeAppointment && isWorkspaceMinimized && (
         <div className="fixed bottom-6 right-6 left-6 md:left-auto md:w-[450px] z-[99] bg-amber-100 border-[3.5px] border-black p-4 rounded-[2rem] shadow-[6px_6px_0px_0px_black] flex items-center justify-between animate-in slide-in-from-bottom-8 duration-300">
@@ -619,6 +676,7 @@ GroomerAgendaView.propTypes = {
     nombre_completo: PropTypes.string,
   }),
   onRefresh: PropTypes.func,
+  updateOptimistically: PropTypes.func,
 };
 
 export default GroomerAgendaView;

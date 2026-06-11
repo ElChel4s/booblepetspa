@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '../../../../../../api/supabase';
 import { useToast } from '../../../../../../store/ToastContext';
 import { useReceptionAlerts } from '../../../../../../store/ReceptionAlertContext';
 import {
@@ -8,6 +9,7 @@ import {
   completeServiceCita,
   processCitaCheckout,
   getFacturasForReservations,
+  updateCitaModifierStatus,
 } from '../services/receptionControlService';
 
 export const useReceptionControl = () => {
@@ -56,7 +58,8 @@ export const useReceptionControl = () => {
             acc[m.cita_id].push({
               id: m.id,
               concepto: m.modificador?.criterio || 'Cargo extra',
-              precio: Number(m.precio_aplicado || 0)
+              precio: Number(m.precio_aplicado || 0),
+              estado_aprobacion: m.estado_aprobacion || 'pendiente'
             });
             return acc;
           }, {});
@@ -75,9 +78,44 @@ export const useReceptionControl = () => {
 
   useEffect(() => {
     loadData();
-    // Refrescar cada 45 segundos
+    // Refrescar cada 45 segundos como fallback
     const interval = setInterval(loadData, 45000);
     return () => clearInterval(interval);
+  }, [loadData]);
+
+  // Suscripción Real-time
+  useEffect(() => {
+    if (!supabase) return;
+
+    const channel = supabase
+      .channel('reception-modifiers-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'cita_modificadores_aplicados'
+        },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'citas'
+        },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [loadData]);
 
   // Dar Ingreso
@@ -104,8 +142,8 @@ export const useReceptionControl = () => {
   }, [loadData, showToast]);
 
   // Abrir Checkout POS
-  const handleAbrirCheckout = useCallback((cita) => {
-    const mods = modificadoresMap[cita.id] || [];
+  const handleAbrirCheckout = useCallback(async (cita) => {
+    const mods = (modificadoresMap[cita.id] || []).filter(m => m.estado_aprobacion === 'aprobado');
     const basePrice = Number(cita.servicio?.precio_base || 0);
     const extraPrice = mods.reduce((acc, m) => acc + m.precio, 0);
 
@@ -113,7 +151,9 @@ export const useReceptionControl = () => {
       cita,
       recomendaciones_post: cita.ficha?.recomendaciones_post || null,
       modificadores_aplicados: mods,
-      total_calculado: basePrice + extraPrice
+      total_calculado: basePrice + extraPrice,
+      insumosUsados: [],
+      loadingInsumos: true
     });
 
     setBillingForm({
@@ -121,6 +161,50 @@ export const useReceptionControl = () => {
       razon_social: cita.mascota?.dueno?.nombre_completo || 'Cliente General',
       metodo_pago: 'QR'
     });
+
+    // Cargar insumos en segundo plano
+    try {
+      if (supabase) {
+        const { data: insData, error: insError } = await supabase
+          .from('cita_insumos_usados')
+          .select('cantidad, abrio_nuevo, productos(nombre)')
+          .eq('cita_id', cita.id);
+
+        if (!insError && insData) {
+          const mapped = insData.map(d => ({
+            nombre: d.productos?.nombre || 'Insumo',
+            cantidad: Number(d.cantidad),
+            abrio_nuevo: d.abrio_nuevo
+          }));
+
+          setCheckoutData(prev => {
+            if (!prev || prev.cita.id !== cita.id) return prev;
+            return {
+              ...prev,
+              insumosUsados: mapped,
+              loadingInsumos: false
+            };
+          });
+        } else {
+          setCheckoutData(prev => {
+            if (!prev || prev.cita.id !== cita.id) return prev;
+            return {
+              ...prev,
+              loadingInsumos: false
+            };
+          });
+        }
+      }
+    } catch (e) {
+      console.error('Error al cargar insumos de la cita:', e);
+      setCheckoutData(prev => {
+        if (!prev || prev.cita.id !== cita.id) return prev;
+        return {
+          ...prev,
+          loadingInsumos: false
+        };
+      });
+    }
   }, [modificadoresMap]);
 
   // Cerrar Checkout
@@ -154,6 +238,17 @@ export const useReceptionControl = () => {
     }
   }, [checkoutData, billingForm, showToast, loadData]);
 
+  // Aprobar / Rechazar cargo extra sugerido
+  const handleUpdateModifierStatus = useCallback(async (appliedModId, newStatus) => {
+    const { error } = await updateCitaModifierStatus(appliedModId, newStatus);
+    if (error) {
+      showToast('Error al actualizar el estado del cargo: ' + error.message, 'error');
+    } else {
+      showToast(newStatus === 'aprobado' ? 'Cargo aprobado con éxito ⚡' : 'Cargo rechazado ✗', 'success');
+      loadData();
+    }
+  }, [loadData, showToast]);
+
   // Filtrar citas que aún no han sido cobradas hoy
   const activeCitas = citas.filter(c => !facturadasReservaIds.has(c.reserva_id));
 
@@ -177,6 +272,7 @@ export const useReceptionControl = () => {
     handleAbrirCheckout,
     handleCerrarCheckout,
     handleFinalizarPago,
+    handleUpdateModifierStatus,
     refresh: loadData
   };
 };

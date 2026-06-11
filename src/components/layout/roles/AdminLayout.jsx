@@ -17,7 +17,7 @@ const AdminLayout = ({ themeVars, onOpenSettings, children }) => (
 
     <Sidebar onOpenSettings={onOpenSettings} />
 
-    <main className="flex-1 flex flex-col w-full pb-32 md:pb-16 z-10 relative md:pl-40 md:px-12 md:pt-8 transition-all duration-500">
+    <main className="flex-1 flex flex-col w-full pb-32 md:pb-16 relative md:pl-40 md:px-12 md:pt-8 transition-all duration-500">
       {children}
     </main>
 

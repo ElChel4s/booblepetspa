@@ -13,6 +13,7 @@ import FilterPanel from '../components/FilterPanel';
 import ProductCard from '../components/ProductCard';
 import PopModal from '../../../components/common/organisms/PopModal';
 import BrutalInput from '../../../components/common/atoms/BrutalInput';
+import StoreSchedulePicker from '../components/StoreSchedulePicker';
 
 const StoreView = () => {
   const { currentUser } = useAuth();
@@ -46,6 +47,7 @@ const StoreView = () => {
   const [guestData, setGuestData] = useState({ nombre: '', ci: '', telefono: '' });
   const [scheduleData, setScheduleData] = useState({ fecha: '', hora: '' });
   const [orderCode, setOrderCode] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Archivo comprobante QR
   const [fileName, setFileName] = useState('');
@@ -118,6 +120,8 @@ const StoreView = () => {
 
   const submitCheckout = async (e) => {
     if (e) e.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       const code = await handleCheckout(guestData, scheduleData, fileObject);
       setOrderCode(code);
@@ -125,6 +129,8 @@ const StoreView = () => {
       clearCart();
     } catch (err) {
       onToast("Error al procesar el pago", true);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -419,11 +425,17 @@ const StoreView = () => {
                 <p className="text-[11px] font-bold text-blue-700 mt-1">Selecciona el día y hora para los servicios de Spa de tu mascota.</p>
               </div>
               
-              <BrutalInput required type="date" label="Día de la Cita" value={scheduleData.fecha} onChange={e=>setScheduleData({...scheduleData, fecha: e.target.value})} icon={Calendar} />
-              <BrutalInput required type="time" label="Hora de Llegada" value={scheduleData.hora} onChange={e=>setScheduleData({...scheduleData, hora: e.target.value})} icon={Clock} />
+              <StoreSchedulePicker 
+                totalTimeMinutes={cart.filter(i => i.tipo === 'servicio').reduce((acc, s) => acc + (s.duracion || 60) * s.qty, 0)}
+                value={scheduleData}
+                onChange={setScheduleData}
+              />
 
-              <button type="submit" className="w-full bg-black text-white py-5 rounded-2xl font-black uppercase tracking-widest border-[4px] border-black shadow-[6px_6px_0px_0px_var(--secondary)] hover:translate-y-1 hover:shadow-none transition-all mt-6 text-lg">
-                Confirmar Reserva ✔️
+              <button 
+                type="submit" 
+                disabled={isSubmitting || !scheduleData.fecha || !scheduleData.hora}
+                className="w-full bg-black text-white py-5 rounded-2xl font-black uppercase tracking-widest border-[4px] border-black shadow-[6px_6px_0px_0px_var(--secondary)] hover:translate-y-1 hover:shadow-none transition-all mt-6 text-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSubmitting ? 'Procesando... ⌛' : 'Confirmar Reserva ✔️'}
               </button>
            </form>
         )}
@@ -472,8 +484,11 @@ const StoreView = () => {
                 )}
               </div>
 
-              <button type="submit" disabled={!fileName} className="w-full bg-[var(--primary)] text-black py-5 rounded-2xl font-black uppercase tracking-widest border-[4px] border-black shadow-[6px_6px_0px_0px_black] hover:translate-y-1 hover:shadow-none transition-all mt-6 text-lg disabled:opacity-50 disabled:cursor-not-allowed">
-                Confirmar Pago y Pedido ✔️
+              <button 
+                type="submit" 
+                disabled={isSubmitting || !fileName} 
+                className="w-full bg-[var(--primary)] text-black py-5 rounded-2xl font-black uppercase tracking-widest border-[4px] border-black shadow-[6px_6px_0px_0px_black] hover:translate-y-1 hover:shadow-none transition-all mt-6 text-lg disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSubmitting ? 'Procesando... ⌛' : 'Confirmar Pago y Pedido ✔️'}
               </button>
            </form>
         )}

@@ -36,7 +36,7 @@ export default function GroomerWorkspace({
   onMinimize
 }) {
   const { showToast } = useToast();
-  
+
   // Timer State
   const [activeTimer, setActiveTimer] = useState(0);
   const [isPaused, setIsPaused] = useState(activeApp?.estado === 'pausada');
@@ -60,8 +60,55 @@ export default function GroomerWorkspace({
   const [loadingInsumos, setLoadingInsumos] = useState(false);
   const [localSaving, setLocalSaving] = useState(false);
   const [sessionInsumos, setSessionInsumos] = useState([]);
+  const [insumosUsados, setInsumosUsados] = useState([]);
 
   const saving = localSaving || savingParent;
+
+  // Cargar receta por defecto y catálogo de insumos
+  useEffect(() => {
+    const fetchRecetaAndInsumos = async () => {
+      if (!activeApp?.servicio_id || !supabase) return;
+
+      try {
+        // 1. Cargar receta del servicio
+        const { data: recetaData, error: recetaError } = await supabase
+          .from('recetas_insumos')
+          .select(`
+            producto_id,
+            cantidad,
+            productos (
+              id,
+              nombre,
+              stock_actual
+            )
+          `)
+          .eq('servicio_id', activeApp.servicio_id);
+
+        if (!recetaError && recetaData) {
+          const mapped = recetaData.map((item) => ({
+            producto_id: item.producto_id,
+            nombre: item.productos?.nombre || 'Insumo',
+            cantidad: parseFloat(item.cantidad) || 1.0,
+            stock_actual: item.productos?.stock_actual || 0,
+            abrio_nuevo: false
+          }));
+          setInsumosUsados(mapped);
+        } else {
+          setInsumosUsados([]);
+        }
+
+        // 2. Pre-cargar catálogo completo de insumos
+        const { data: catData, error: catError } = await getInsumosList();
+        if (!catError && catData) {
+          setInsumosList(catData);
+        }
+      } catch (err) {
+        console.error('Error al cargar insumos iniciales:', err);
+      }
+    };
+
+    fetchRecetaAndInsumos();
+  }, [activeApp?.servicio_id]);
 
   const activeAppId = activeApp?.id;
 
@@ -85,7 +132,7 @@ export default function GroomerWorkspace({
     if (activeApp) {
       const ficha = activeApp.ficha || {};
       const fotos = activeApp.fotos || [];
-      
+
       const beforePhoto = fotos.find((f) => f.tipo_momento === 'antes')?.url_foto || null;
       const afterPhoto = fotos.find((f) => f.tipo_momento === 'despues')?.url_foto || null;
 
@@ -110,7 +157,7 @@ export default function GroomerWorkspace({
     if (!activeApp) return;
 
     const isRunning = activeApp.estado === 'en_proceso';
-    
+
     const saved = localStorage.getItem(`groomer_timer_${activeApp.id}`);
     let parsed = saved ? parseInt(saved, 10) : 0;
 
@@ -164,7 +211,7 @@ export default function GroomerWorkspace({
   const handlePauseToggle = async () => {
     if (!activeApp) return;
     setLocalSaving(true);
-    
+
     if (isPaused) {
       const { error } = await startAppointment(activeApp.id);
       if (error) {
@@ -203,12 +250,12 @@ export default function GroomerWorkspace({
   const handleToggleModifier = async (extra, isSelected) => {
     if (!activeApp) return;
     setLocalSaving(true);
-    
+
     if (isSelected) {
       // Quitar modificador
       const applied = activeApp.modificadores_aplicados?.find((a) => a.modificador_id === extra.id || a.id === extra.id);
       const modId = applied?.modificador_id || extra.id;
-      
+
       const { error } = await removeCitaModifier(activeApp.id, modId);
       if (error) {
         showToast('Error al remover recargo sugerido', 'error');
@@ -223,6 +270,49 @@ export default function GroomerWorkspace({
         showToast('Error al sugerir recargo', 'error');
       } else {
         showToast('Recargo sugerido correctamente', 'success');
+
+        // --- INSERCIÓN DE NOTIFICACIONES (JS-Only) ---
+        if (supabase) {
+          const mascotaNombre = activeApp.mascota?.nombre || 'la mascota';
+          const serviceName = extra.criterio || 'Servicio Adicional';
+          const duenoId = activeApp.mascota?.dueno_id;
+
+          try {
+            // 1. Notificar a Recepción
+            await supabase.from('notificaciones').insert({
+              rol_destino: 'recepcion',
+              titulo: 'Nuevo Servicio Sugerido',
+              mensaje: `El groomer sugirió "${serviceName}" para ${mascotaNombre}.`,
+              tipo: 'cita',
+              link_modulo: 'agenda'
+            });
+
+            // 2. Notificar al Administrador
+            await supabase.from('notificaciones').insert({
+              rol_destino: 'admin',
+              titulo: 'Nuevo Servicio Sugerido',
+              mensaje: `El groomer sugirió "${serviceName}" para ${mascotaNombre}.`,
+              tipo: 'cita',
+              link_modulo: 'agenda'
+            });
+
+            // 3. Notificar al Cliente
+            if (duenoId) {
+              await supabase.from('notificaciones').insert({
+                usuario_id: duenoId,
+                rol_destino: 'cliente',
+                titulo: 'Sugerencia de Servicio Extra',
+                mensaje: `El groomer recomienda añadir "${serviceName}" para ${mascotaNombre}. Revisa y aprueba la solicitud.`,
+                tipo: 'cita',
+                link_modulo: '/cliente/citas'
+              });
+            }
+          } catch (notifErr) {
+            console.error('[GroomerWorkspace] Error inserting suggestions notifications:', notifErr);
+          }
+        }
+        // --- FIN INSERCIÓN ---
+
         if (onRefresh) await onRefresh();
       }
     }
@@ -233,7 +323,7 @@ export default function GroomerWorkspace({
   const handleWithdrawInsumo = async (insumo) => {
     if (!activeApp || !currentUser) return;
     setLocalSaving(true);
-    
+
     const { error } = await withdrawInsumo(insumo.id, currentUser.id, activeApp.id);
     if (error) {
       showToast('Error al registrar retiro de insumo', 'error');
@@ -247,9 +337,9 @@ export default function GroomerWorkspace({
       );
       // Actualizar sesión
       setSessionInsumos((prev) => {
-         const existing = prev.find(p => p.id === insumo.id);
-         if (existing) return prev.map(p => p.id === insumo.id ? { ...p, qty: p.qty + 1 } : p);
-         return [...prev, { id: insumo.id, nombre: insumo.nombre, qty: 1 }];
+        const existing = prev.find(p => p.id === insumo.id);
+        if (existing) return prev.map(p => p.id === insumo.id ? { ...p, qty: p.qty + 1 } : p);
+        return [...prev, { id: insumo.id, nombre: insumo.nombre, qty: 1 }];
       });
     }
     setLocalSaving(false);
@@ -259,11 +349,10 @@ export default function GroomerWorkspace({
   const handleTakePhoto = async (tipo) => {
     if (!activeApp) return;
     setLocalSaving(true);
-    
+
     // Generar URL demo de Unsplash
-    const randomUrl = `https://images.unsplash.com/photo-${
-      tipo === 'antes' ? '1537151608804-ea2f1ea14a15' : '1552053831-71594a27632d'
-    }?w=400&h=400&fit=crop`;
+    const randomUrl = `https://images.unsplash.com/photo-${tipo === 'antes' ? '1537151608804-ea2f1ea14a15' : '1552053831-71594a27632d'
+      }?w=400&h=400&fit=crop`;
 
     const fichaId = activeApp.ficha?.id;
     if (fichaId) {
@@ -286,7 +375,7 @@ export default function GroomerWorkspace({
   const handleRemovePhoto = async (tipo) => {
     if (!activeApp) return;
     setLocalSaving(true);
-    
+
     const fotoRecord = activeApp.fotos?.find((f) => f.tipo_momento === tipo);
     if (fotoRecord) {
       const { error } = await removeGroomingPhoto(fotoRecord.id);
@@ -307,18 +396,23 @@ export default function GroomerWorkspace({
   const handleFinalizarServicio = async () => {
     if (!activeApp) return;
     setLocalSaving(true);
-    
-    // Primero, guardar diagnóstico e ingresos en fichas_grooming + cambiar estado citas a completada
-    const { error } = await saveAndFinishFicha(activeApp.id, {
-      nudos: fichaForm.nudos,
-      pulgas: fichaForm.pulgas,
-      heridas: fichaForm.heridas,
-      peso: fichaForm.peso,
-      temperamento: fichaForm.temperamento,
-      observaciones_groomer: fichaForm.observaciones_groomer,
-      recomendaciones_post: fichaForm.recomendaciones_post,
-      foto_despues: fichaForm.foto_despues
-    });
+
+    // Guardar diagnóstico e ingresos en fichas_grooming, guardar insumos manuales, y completar la cita
+    const { error } = await saveAndFinishFicha(
+      activeApp.id,
+      {
+        nudos: fichaForm.nudos,
+        pulgas: fichaForm.pulgas,
+        heridas: fichaForm.heridas,
+        peso: fichaForm.peso,
+        temperamento: fichaForm.temperamento,
+        observaciones_groomer: fichaForm.observaciones_groomer,
+        recomendaciones_post: fichaForm.recomendaciones_post,
+        foto_despues: fichaForm.foto_despues
+      },
+      insumosUsados,
+      currentUser?.id
+    );
 
     if (error) {
       showToast('Error al finalizar el servicio', 'error');
@@ -326,7 +420,7 @@ export default function GroomerWorkspace({
       // Limpiar timer de LocalStorage
       localStorage.removeItem(`groomer_timer_${activeApp.id}`);
       localStorage.removeItem(`groomer_timer_last_active_${activeApp.id}`);
-      
+
       showToast('¡Servicio finalizado y enviado a caja!', 'success');
       if (onRefresh) await onRefresh();
     }
@@ -353,8 +447,8 @@ export default function GroomerWorkspace({
   const isReadyToCheckout = checklist.length > 0 && completedCount === checklist.length;
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#f8fafc] font-['Nunito',sans-serif] flex flex-col overflow-hidden">
-      
+    <div className="fixed inset-0 z-[100] bg-[#f8fafc] font-['Nunito',sans-serif] flex flex-col overflow-hidden">
+
       {/* Header */}
       <GroomerHeader
         activeApp={activeApp}
@@ -387,10 +481,10 @@ export default function GroomerWorkspace({
 
       {/* Workspace columns */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
-        
+
         {/* COLUMNA IZQUIERDA: DIAGNÓSTICO Y REGISTRO */}
         <div className="w-full lg:w-5/12 bg-white border-r-[4px] border-black p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6 pb-24">
-          
+
           <PatientClinicalInfo activeApp={activeApp} />
 
           <h3 className="font-black text-xl uppercase border-b-[4px] border-black pb-2 flex items-center gap-2 mt-2">
@@ -416,7 +510,7 @@ export default function GroomerWorkspace({
             <h4 className="font-black text-lg uppercase flex items-center gap-2">
               <Package size={20} className="text-[var(--primary)]" /> Insumos en uso de estación
             </h4>
-            
+
             {sessionInsumos.length > 0 ? (
               <div className="space-y-2">
                 {sessionInsumos.map((ins) => (
@@ -451,6 +545,9 @@ export default function GroomerWorkspace({
               onRecommendationsChange={(text) => setFichaForm((prev) => ({ ...prev, recomendaciones_post: text }))}
               onSubmit={handleFinalizarServicio}
               saving={saving}
+              insumosUsados={insumosUsados}
+              setInsumosUsados={setInsumosUsados}
+              insumosList={insumosList}
             />
           ) : (
             <GroomerChecklist

@@ -114,10 +114,17 @@ export const getFinanceDashboardData = async () => {
   handleSupabaseError(eError, 'Error al cargar los egresos');
 
   // 2. Obtener Ingresos Físicos (pagos)
+  // Join pagos → facturas → reservas para obtener fecha_creacion (la fecha real de la transacción)
   const { data: pagosFisicos, error: pError } = await supabase
     .from('pagos')
-    .select('id, monto_pagado, metodo_pago, fecha') // Ajusta esto según tu esquema real
-    .order('fecha', { ascending: false });
+    .select(`
+      id, monto_pagado, metodo_pago, referencia_transaccion,
+      factura:facturas(
+        id, monto_total, estado_factura,
+        reserva:reservas(fecha_creacion),
+        cliente:perfiles!facturas_cliente_id_fkey(nombre_completo)
+      )
+    `);
     
   handleSupabaseError(pError, 'Error al cargar los pagos en caja');
 
@@ -141,14 +148,23 @@ export const getFinanceDashboardData = async () => {
   }));
 
   // Mapeo unificado de Ingresos Físicos
-  const mappedIncomeFisico = (pagosFisicos || []).map(p => ({
-    id: `ing-pos-${p.id}`,
-    fecha: p.fecha || new Date().toISOString(), // Asumiendo que agregaste fecha a pagos en DB
-    tipo: 'ingreso',
-    concepto: 'Cobro en Caja (POS)',
-    monto: p.monto_pagado,
-    metodo: p.metodo_pago
-  }));
+  const mappedIncomeFisico = (pagosFisicos || []).map(p => {
+    // Resolver la fecha más precisa disponible: reserva → factura → hoy
+    const fechaReserva = p.factura?.reserva?.fecha_creacion;
+    const fechaFinal = fechaReserva || new Date().toISOString();
+    const clienteNombre = p.factura?.cliente?.nombre_completo;
+
+    return {
+      id: `ing-pos-${p.id}`,
+      fecha: fechaFinal,
+      tipo: 'ingreso',
+      concepto: clienteNombre
+        ? `Cobro POS: ${clienteNombre} (${p.referencia_transaccion || 'POS'})`
+        : `Cobro en Caja (${p.referencia_transaccion || 'POS'})`,
+      monto: p.monto_pagado,
+      metodo: p.metodo_pago
+    };
+  });
 
   // Mapeo unificado de Ingresos Web
   const mappedIncomeWeb = (pagosWeb || []).map(pw => ({
@@ -287,14 +303,28 @@ export const getPendingPosBookings = async () => {
     return [];
   }
 
+  // Comparador para validar si el servicio se realizó el día de hoy (según hora local)
+  const today = new Date();
+  const todayYear = today.getFullYear();
+  const todayMonth = today.getMonth();
+  const todayDate = today.getDate();
+
+  const isToday = (dateStr) => {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d.getFullYear() === todayYear &&
+           d.getMonth() === todayMonth &&
+           d.getDate() === todayDate;
+  };
+
   // Filtramos solo las reservas que tengan al menos una cita completada
   const reservasValidas = (reservasCobrables || []).filter(r => 
-    r.citas.some(c => c.estado === 'completada')
+    r.citas && r.citas.some(c => c.estado === 'completada')
   );
 
   return reservasValidas.map(r => {
-    // Tomamos la info de la mascota de la primera cita (simplificación)
-    const citaConMascota = r.citas.find(c => c.mascotas);
+    // Tomamos la info de la mascota de la primera cita completada (simplificación)
+    const citaConMascota = r.citas.find(c => c.mascotas && c.estado === 'completada');
     const mascota = citaConMascota?.mascotas || { nombre: 'Desconocido', especie: 'Desconocido', raza: '' };
     
     // Extraemos los servicios de las citas completadas
@@ -404,4 +434,73 @@ export const processPosPayment = async (invoiceData, adminId) => {
 
   return true;
 };
+
+/**
+ * Obtiene todos los pedidos registrados en el sistema (para entregas e historial)
+ */
+export const getAllOrders = async () => {
+  if (!IS_REAL_AUTH) {
+    await delay();
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from('pedidos')
+    .select(`
+      id,
+      cliente_id,
+      monto_total,
+      estado_pedido,
+      estado_pago,
+      codigo_seguimiento,
+      perfiles!pedidos_cliente_id_fkey (
+        nombre_completo,
+        telefono
+      ),
+      detalle_pedidos (
+        id,
+        cantidad,
+        precio_unitario_snap,
+        productos (
+          nombre
+        )
+      )
+    `);
+
+  handleSupabaseError(error, 'Error al obtener todos los pedidos');
+
+  return (data || []).map(p => ({
+    id: p.id,
+    cliente: p.perfiles?.nombre_completo || 'Cliente Anónimo',
+    telefono: p.perfiles?.telefono || 'N/A',
+    monto_total: p.monto_total,
+    estado_pedido: p.estado_pedido,
+    estado_pago: p.estado_pago,
+    codigo_seguimiento: p.codigo_seguimiento || `BP-${p.id.substring(0, 5).toUpperCase()}`,
+    productos: (p.detalle_pedidos || []).map(det => ({
+      nombre: det.productos?.nombre || 'Producto Desconocido',
+      cantidad: det.cantidad,
+      precio: det.precio_unitario_snap
+    }))
+  }));
+};
+
+/**
+ * Marca un pedido como entregado en la base de datos.
+ */
+export const deliverOrder = async (pedidoId) => {
+  if (!IS_REAL_AUTH) {
+    await delay();
+    return true;
+  }
+
+  const { error } = await supabase
+    .from('pedidos')
+    .update({ estado_pedido: 'entregado' })
+    .eq('id', pedidoId);
+
+  handleSupabaseError(error, 'Error al marcar el pedido como entregado');
+  return true;
+};
+
 

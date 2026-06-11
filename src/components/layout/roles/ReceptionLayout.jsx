@@ -5,6 +5,7 @@ import { useReceptionAlerts } from '../../../store/ReceptionAlertContext';
 import TriageModal from '../../../modules/agenda/components/reception/control/components/TriageModal';
 import FloatingAlerts from '../../../modules/agenda/components/reception/control/components/FloatingAlerts';
 import { approveTriageAlert } from '../../../modules/grooming/services/groomingMonitorService';
+import { updateCitaModifierStatus } from '../../../modules/agenda/components/reception/control/services/receptionControlService';
 import { useToast } from '../../../store/ToastContext';
 
 const ReceptionLayout = ({ themeVars, onOpenSettings, children }) => {
@@ -21,13 +22,42 @@ const ReceptionLayout = ({ themeVars, onOpenSettings, children }) => {
 
   const handleApprove = async () => {
     if (!alertaActiva) return;
-    const { error } = await approveTriageAlert(alertaActiva.cita_id, alertaActiva.motivo, alertaActiva.precio_extra);
-    if (error) {
-      showToast('Error al aprobar el recargo: ' + error.message, 'error');
+    
+    if (alertaActiva.es_modificador) {
+      const { error } = await updateCitaModifierStatus(alertaActiva.modifier_applied_id, 'aprobado');
+      if (error) {
+        showToast('Error al aprobar el servicio adicional: ' + error.message, 'error');
+      } else {
+        showToast('Servicio adicional aprobado y aplicado', 'success');
+        setAlertaActiva(null);
+        refetchAlerts();
+      }
     } else {
-      showToast('Recargo aprobado y aplicado', 'success');
+      const { error } = await approveTriageAlert(alertaActiva.cita_id, alertaActiva.motivo, alertaActiva.precio_extra);
+      if (error) {
+        showToast('Error al aprobar el recargo: ' + error.message, 'error');
+      } else {
+        showToast('Recargo aprobado y aplicado', 'success');
+        setAlertaActiva(null);
+        refetchAlerts();
+      }
+    }
+  };
+
+  const handleReject = async () => {
+    if (!alertaActiva) return;
+
+    if (alertaActiva.es_modificador) {
+      const { error } = await updateCitaModifierStatus(alertaActiva.modifier_applied_id, 'rechazado');
+      if (error) {
+        showToast('Error al rechazar el servicio adicional: ' + error.message, 'error');
+      } else {
+        showToast('Servicio adicional rechazado', 'warning');
+        setAlertaActiva(null);
+        refetchAlerts();
+      }
+    } else {
       setAlertaActiva(null);
-      refetchAlerts();
     }
   };
 
@@ -46,7 +76,7 @@ const ReceptionLayout = ({ themeVars, onOpenSettings, children }) => {
 
       <Sidebar onOpenSettings={onOpenSettings} />
 
-      <main className="flex-1 flex flex-col w-full pb-32 md:pb-16 z-10 relative md:pl-40 md:px-10 md:pt-8 transition-all duration-500">
+      <main className="flex-1 flex flex-col w-full pb-32 md:pb-16 relative md:pl-40 md:px-10 md:pt-8 transition-all duration-500">
         {children}
       </main>
 
@@ -59,6 +89,7 @@ const ReceptionLayout = ({ themeVars, onOpenSettings, children }) => {
           onClose={() => setAlertaActiva(null)}
           onPostpone={posponerAlerta}
           onApprove={handleApprove}
+          onReject={handleReject}
         />
       )}
 

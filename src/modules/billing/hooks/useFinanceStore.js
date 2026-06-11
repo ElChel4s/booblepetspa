@@ -7,7 +7,9 @@ import {
   registerExpense as registerExpenseService,
   getPendingPosBookings,
   getPosProducts,
-  processPosPayment
+  processPosPayment,
+  getAllOrders,
+  deliverOrder
 } from '../services/financeService';
 
 export const useFinanceStore = () => {
@@ -26,6 +28,10 @@ export const useFinanceStore = () => {
   const [incomes, setIncomes] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(false);
+
+  // Estados para Entregas / Historial de Pedidos
+  const [allOrders, setAllOrders] = useState([]);
+  const [isLoadingAllOrders, setIsLoadingAllOrders] = useState(false);
 
   const [error, setError] = useState(null);
 
@@ -149,6 +155,40 @@ export const useFinanceStore = () => {
     }
   };
 
+  /**
+   * Carga todos los pedidos (para entregas e historial)
+   */
+  const loadAllOrders = useCallback(async () => {
+    setIsLoadingAllOrders(true);
+    setError(null);
+    try {
+      const orders = await getAllOrders();
+      setAllOrders(orders);
+    } catch (err) {
+      console.error(err);
+      setError('Error al cargar todos los pedidos.');
+    } finally {
+      setIsLoadingAllOrders(false);
+    }
+  }, []);
+
+  /**
+   * Marca un pedido como entregado y actualiza localmente
+   */
+  const handleDeliverOrder = async (pedidoId, onToast) => {
+    try {
+      await deliverOrder(pedidoId);
+      // Actualizamos el estado local
+      setAllOrders(prev => prev.map(o => o.id === pedidoId ? { ...o, estado_pedido: 'entregado' } : o));
+      if (onToast) onToast('📦 Pedido marcado como entregado.');
+      return true;
+    } catch (err) {
+      console.error(err);
+      if (onToast) onToast('❌ Error al entregar el pedido.', true);
+      return false;
+    }
+  };
+
   return {
     pendingOrders,
     isLoadingOrders,
@@ -166,6 +206,11 @@ export const useFinanceStore = () => {
     isLoadingDashboard,
     loadDashboardData,
     registerExpense,
+
+    allOrders,
+    isLoadingAllOrders,
+    loadAllOrders,
+    handleDeliverOrder,
     
     error
   };

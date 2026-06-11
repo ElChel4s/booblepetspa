@@ -29,6 +29,7 @@ import AdminInventoryView from './modules/inventory/views/AdminInventoryView';
 import ReceptionPosView from './modules/inventory/views/ReceptionPosView';
 import GroomerSuppliesView from './modules/inventory/views/GroomerSuppliesView';
 import AdminDashboardView from './modules/reports/views/AdminDashboardView';
+import ReceptionDashboardView from './modules/reports/views/ReceptionDashboardView';
 import ClientsModule from './modules/clients/ClientsModule';
 import ClientPetsView from './modules/clients/views/ClientPetsView';
 import ClientHistoryView from './modules/clients/views/ClientHistoryView';
@@ -130,7 +131,7 @@ const ModuleRenderer = ({ onAddToCart, isAdded }) => {
   }
 
   if (activeModule === 'reports') {
-    return <AdminDashboardView />;
+    return rolActual === 'admin' ? <AdminDashboardView /> : <ReceptionDashboardView />;
   }
 
   if (activeModule === 'audit') {

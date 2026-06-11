@@ -31,7 +31,7 @@ export const PERMISSIONS = {
     MODULES.MASCOTAS, MODULES.GROOMING
   ],
   recepcion: [
-    MODULES.AGENDA, MODULES.CLIENTS, MODULES.CASH, MODULES.TIENDA, 
+    MODULES.REPORTS, MODULES.AGENDA, MODULES.CLIENTS, MODULES.CASH, MODULES.TIENDA, 
     MODULES.SERVICES, MODULES.FINANCE, MODULES.INVENTORY, MODULES.USERS,
     MODULES.GROOMING
   ],
@@ -60,7 +60,7 @@ export const canAccess = (role, module) => {
 export const getDefaultModule = (role) => {
   const defaults = {
     admin: MODULES.REPORTS,
-    recepcion: MODULES.AGENDA,
+    recepcion: MODULES.REPORTS,
     groomer: MODULES.TURNOS,
     cliente: MODULES.TIENDA
   };

@@ -202,7 +202,7 @@ const Header = ({ cartCount, favCount, onOpenProfile, onOpenAuth, user, petCount
           </button>
 
           {isPublic ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 md:gap-2">
               <button className="hidden md:flex relative p-2.5 bg-black text-white rounded-xl hover:bg-[var(--primary)] transition-all shadow-md active:scale-90">
                 <ShoppingBag size={20} strokeWidth={3} />
                 {cartCount > 0 && (
@@ -211,10 +211,10 @@ const Header = ({ cartCount, favCount, onOpenProfile, onOpenAuth, user, petCount
                   </span>
                 )}
               </button>
-              <PwaInstallButton className="hidden md:flex" />
+              <PwaInstallButton />
               <button
                 type="button"
-                className="flex items-center gap-2 bg-black text-white rounded-2xl px-4 py-2 border-[3px] border-black shadow-[4px_4px_0px_0px_black] font-black text-[10px] uppercase tracking-widest hover:translate-y-1 hover:shadow-none transition-all"
+                className="flex items-center gap-2 bg-black text-white rounded-2xl px-3 py-2 md:px-4 border-[3px] border-black shadow-[4px_4px_0px_0px_black] font-black text-[10px] uppercase tracking-widest hover:translate-y-1 hover:shadow-none transition-all"
                 onClick={onOpenAuth}
               >
                 <LogIn size={16} strokeWidth={3} /> Ingresar

@@ -176,9 +176,10 @@ export const procesarOrdenWeb = async (cart, guestData, scheduleData, clientId =
 
     const { error: compError } = await supabase.from('comprobantes_pago').insert([{
       pedido_id: lastPedidoId,
+      cliente_id: clientId || guestClientUUID,
+      monto: totalMontoProductos,
       url_comprobante: publicUrlData.publicUrl,
-      monto_declarado: totalMontoProductos,
-      estado_validacion: 'pendiente'
+      estado: 'pendiente'
     }]);
     
     handleSupabaseError(compError, 'Error al registrar el comprobante en la base de datos');

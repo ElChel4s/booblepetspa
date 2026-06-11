@@ -106,6 +106,25 @@ export const getClientGroomerAppointments = async (groomerId, dateStr) => {
   return query;
 };
 
+export const getClientGroomerExceptions = async (groomerId, dateStr) => {
+  if (!supabase) return { data: [], error: null };
+  
+  // dateStr is formatted as "YYYY-MM-DD"
+  
+  let query = supabase
+    .from('excepciones_agenda')
+    .select('*')
+    .eq('fecha_efectiva', dateStr);
+
+  // If a specific groomer is selected, get exceptions that apply to all (general) OR this specific groomer
+  // If 'any' is selected, we'll get all exceptions and filter them on the client side
+  if (groomerId && groomerId !== 'any') {
+    query = query.or(`tipo.eq.general,and(tipo.eq.staff,groomer_id.eq.${groomerId})`);
+  }
+
+  return query;
+};
+
 export const createClientBooking = async ({ clienteId, totalReserva, appointments }) => {
   if (!supabase) return { error: NOT_CONFIGURED_ERROR };
 

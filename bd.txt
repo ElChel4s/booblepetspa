@@ -354,3 +354,41 @@ CREATE TABLE public.notificaciones (
   CONSTRAINT notificaciones_pkey PRIMARY KEY (id),
   CONSTRAINT notificaciones_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.perfiles(id)
 );
+CREATE TABLE public.recetas_insumos (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  servicio_id uuid NOT NULL,
+  producto_id uuid NOT NULL,
+  cantidad numeric NOT NULL DEFAULT 1.00,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT recetas_insumos_pkey PRIMARY KEY (id),
+  CONSTRAINT recetas_insumos_servicio_id_fkey FOREIGN KEY (servicio_id) REFERENCES public.servicios(id),
+  CONSTRAINT recetas_insumos_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id)
+);
+CREATE TABLE public.arqueos_caja (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  fecha_apertura timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  fecha_cierre timestamp with time zone,
+  usuario_id uuid NOT NULL,
+  monto_inicial numeric NOT NULL DEFAULT 0.00,
+  monto_final_sistema numeric,
+  monto_final_declarado numeric,
+  diferencia numeric,
+  estado character varying DEFAULT 'abierta'::character varying,
+  observaciones text,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT arqueos_caja_pkey PRIMARY KEY (id),
+  CONSTRAINT arqueos_caja_usuario_id_fkey FOREIGN KEY (usuario_id) REFERENCES public.perfiles(id)
+);
+CREATE TABLE public.cita_insumos_usados (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  cita_id uuid NOT NULL,
+  producto_id uuid NOT NULL,
+  cantidad numeric NOT NULL DEFAULT 1.00,
+  abrio_nuevo boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT cita_insumos_usados_pkey PRIMARY KEY (id),
+  CONSTRAINT cita_insumos_usados_cita_id_fkey FOREIGN KEY (cita_id) REFERENCES public.citas(id),
+  CONSTRAINT cita_insumos_usados_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.productos(id)
+);

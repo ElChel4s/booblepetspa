@@ -11,7 +11,10 @@ export default function GroomerCheckout({
   recommendations,
   onRecommendationsChange,
   onSubmit,
-  saving
+  saving,
+  insumosUsados = [],
+  setInsumosUsados,
+  insumosList = []
 }) {
   const agregarRecomendacionRapida = (chip) => {
     const newText = recommendations ? `${recommendations}\n- ${chip}` : `- ${chip}`;
@@ -30,7 +33,7 @@ export default function GroomerCheckout({
 
         {/* Evidencia Final */}
         <div className="bg-white border-[4px] border-black rounded-2xl p-5 shadow-inner mb-6 space-y-4">
-          <h4 className="font-black uppercase text-sm flex items-center gap-2">
+          <h4 className="font-black uppercase text-sm flex items-center gap-2 text-black">
             <Camera size={18} /> Evidencia Final
           </h4>
           {fotoDespues ? (
@@ -57,9 +60,163 @@ export default function GroomerCheckout({
           )}
         </div>
 
+        {/* Registro de Insumos */}
+        <div className="bg-white border-[4px] border-black rounded-2xl p-5 shadow-inner mb-6 space-y-4 text-black">
+          <h4 className="font-black uppercase text-sm flex items-center gap-2">
+            🧴 Insumos Utilizados en el Servicio
+          </h4>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-tight">
+            Registra los insumos consumidos. Marca &ldquo;Envase Nuevo&rdquo; solo si abriste una botella nueva del inventario central.
+          </p>
+
+          {/* Lista de insumos usados */}
+          {insumosUsados.length > 0 ? (
+            <div className="space-y-3">
+              {insumosUsados.map((item) => {
+                const outOfStock = item.stock_actual <= 0;
+                return (
+                  <div
+                    key={item.producto_id}
+                    className="bg-slate-50 border-[3px] border-black rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black uppercase text-xs truncate leading-tight">{item.nombre}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                        Stock Almacén: {item.stock_actual} ud
+                      </p>
+                    </div>
+
+                    <div className="flex items-center flex-wrap gap-2 shrink-0">
+                      {/* Control de cantidad */}
+                      <div className="flex items-center bg-white border-2 border-black rounded-lg overflow-hidden h-8">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextQty = Math.max(0.05, parseFloat((item.cantidad - 0.1).toFixed(2)));
+                            setInsumosUsados((prev) =>
+                              prev.map((i) =>
+                                i.producto_id === item.producto_id ? { ...i, cantidad: nextQty } : i
+                              )
+                            );
+                          }}
+                          className="px-2 h-full font-black hover:bg-slate-200 transition-colors"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="0.05"
+                          value={item.cantidad}
+                          onChange={(e) => {
+                            const val = Math.max(0.05, parseFloat(parseFloat(e.target.value).toFixed(2)) || 0.05);
+                            setInsumosUsados((prev) =>
+                              prev.map((i) =>
+                                i.producto_id === item.producto_id ? { ...i, cantidad: val } : i
+                              )
+                            );
+                          }}
+                          className="w-14 h-full text-center font-bold text-xs bg-transparent outline-none border-x-2 border-black [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextQty = parseFloat((item.cantidad + 0.1).toFixed(2));
+                            setInsumosUsados((prev) =>
+                              prev.map((i) =>
+                                i.producto_id === item.producto_id ? { ...i, cantidad: nextQty } : i
+                              )
+                            );
+                          }}
+                          className="px-2 h-full font-black hover:bg-slate-200 transition-colors"
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      {/* Botón Abrió Nuevo Envase */}
+                      <button
+                        type="button"
+                        disabled={outOfStock && !item.abrio_nuevo}
+                        onClick={() => {
+                          setInsumosUsados((prev) =>
+                            prev.map((i) =>
+                              i.producto_id === item.producto_id ? { ...i, abrio_nuevo: !i.abrio_nuevo } : i
+                            )
+                          );
+                        }}
+                        className={`px-2 py-1 rounded-lg border-2 border-black font-black text-[9px] uppercase transition-all shadow-[2px_2px_0px_0px_black] active:translate-y-0.5 active:shadow-none cursor-pointer
+                          ${item.abrio_nuevo
+                            ? 'bg-amber-400 text-black'
+                            : 'bg-white text-slate-500 hover:bg-slate-100'
+                          } ${outOfStock && !item.abrio_nuevo ? 'opacity-50 cursor-not-allowed shadow-none active:translate-y-0' : ''}`}
+                      >
+                        <span>{item.abrio_nuevo ? '🆕 Envase Nuevo' : '🔄 Compartido'}</span>
+                      </button>
+
+                      {/* Eliminar de la lista */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInsumosUsados((prev) => prev.filter((i) => i.producto_id !== item.producto_id));
+                        }}
+                        className="p-1 bg-rose-100 text-rose-700 border-2 border-black rounded-lg hover:bg-rose-200 active:translate-y-0.5 active:shadow-none shadow-[2px_2px_0px_0px_black] transition-all cursor-pointer"
+                        title="Quitar"
+                      >
+                        <X size={14} strokeWidth={3} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs font-bold text-slate-400 italic uppercase">No se han registrado insumos para esta sesión.</p>
+          )}
+
+          {/* Selector de insumos a agregar */}
+          <div className="pt-2 border-t border-black/10 flex flex-col gap-2">
+            <label className="text-[10px] font-black uppercase tracking-wider text-slate-600">
+              ➕ Agregar otro insumo al reporte
+            </label>
+            <select
+              value=""
+              onChange={(e) => {
+                const pId = e.target.value;
+                if (!pId) return;
+                const exists = insumosUsados.some((i) => i.producto_id === pId);
+                if (exists) return;
+                const selected = insumosList.find((i) => i.id === pId);
+                if (selected) {
+                  setInsumosUsados((prev) => [
+                    ...prev,
+                    {
+                      producto_id: selected.id,
+                      nombre: selected.nombre,
+                      cantidad: 1.0,
+                      stock_actual: selected.stock_actual || 0,
+                      abrio_nuevo: false
+                    }
+                  ]);
+                }
+              }}
+              className="w-full bg-slate-50 border-2 border-black rounded-xl p-2.5 font-bold text-xs outline-none cursor-pointer hover:bg-slate-100 transition-colors shadow-[2px_2px_0px_0px_black] focus:translate-y-0.5 focus:shadow-none"
+            >
+              <option value="">-- Seleccionar insumo para agregar... --</option>
+              {insumosList
+                .filter((opt) => !insumosUsados.some((i) => i.producto_id === opt.id))
+                .map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.nombre} (Stock: {opt.stock_actual} ud)
+                  </option>
+                ))}
+            </select>
+          </div>
+        </div>
+
         {/* Recomendaciones */}
         <div className="space-y-3 mb-6">
-          <h4 className="font-black uppercase text-sm flex items-center gap-2">
+          <h4 className="font-black uppercase text-sm flex items-center gap-2 text-black">
             <Heart size={16} /> Recomendaciones para el Cliente
           </h4>
           
@@ -80,7 +237,7 @@ export default function GroomerCheckout({
             value={recommendations}
             onChange={(e) => onRecommendationsChange(e.target.value)}
             placeholder="Escribe recomendaciones personalizadas para la tabla fichas_grooming.recomendaciones_post..."
-            className="w-full h-24 bg-white border-[3px] border-black rounded-xl p-3 font-bold text-sm outline-none focus:ring-4 focus:ring-black/20 transition-all resize-none"
+            className="w-full h-24 bg-white border-[3px] border-black rounded-xl p-3 font-bold text-sm outline-none focus:ring-4 focus:ring-black/20 transition-all resize-none text-black"
           />
         </div>
       </div>
@@ -106,4 +263,7 @@ GroomerCheckout.propTypes = {
   onRecommendationsChange: PropTypes.func.isRequired,
   onSubmit: PropTypes.func.isRequired,
   saving: PropTypes.bool,
+  insumosUsados: PropTypes.array,
+  setInsumosUsados: PropTypes.func.isRequired,
+  insumosList: PropTypes.array
 };

@@ -6,7 +6,7 @@ import { supabase } from '../../../../../../api/supabase';
 
 const PET_EMOJI = { Perro: '🐶', Gato: '🐱', Conejo: '🐰', Ave: '🦜', Otro: '🐾' };
 
-export default function GroomingCard({ cita, extras = [], onComplete }) {
+export default function GroomingCard({ cita, extras = [], onComplete, onUpdateModifierStatus }) {
   const petName = cita.mascota?.nombre || 'Mascota';
   const petEmoji = PET_EMOJI[cita.mascota?.especie] || '🐾';
   const groomerName = cita.groomer?.nombre_completo || 'Sin asignar';
@@ -86,15 +86,75 @@ export default function GroomingCard({ cita, extras = [], onComplete }) {
 
       {/* Extras/Modificadores aplicados */}
       {extras.length > 0 && (
-        <div className="pl-2 flex flex-wrap gap-1">
-          {extras.map((mod) => (
-            <span
-              key={mod.id}
-              className="text-[9px] font-black uppercase bg-rose-100 border-2 border-black px-2 py-0.5 rounded-lg shadow-[2px_2px_0px_0px_black] text-rose-600 flex items-center gap-1 animate-in slide-in-from-left-2 duration-300"
-            >
-              <Zap size={10} className="fill-current" /> {mod.concepto} (+Bs. {mod.precio})
-            </span>
-          ))}
+        <div className="pl-2 flex flex-col gap-2">
+          <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Cargos Extra:</p>
+          <div className="flex flex-col gap-1.5">
+            {extras.map((mod) => {
+              const status = mod.estado_aprobacion || 'pendiente';
+              
+              if (status === 'aprobado') {
+                return (
+                  <div
+                    key={mod.id}
+                    className="flex items-center justify-between text-[10px] font-black uppercase bg-emerald-100 border-2 border-black px-2.5 py-1 rounded-xl shadow-[2px_2px_0px_0px_black] text-emerald-800 animate-in fade-in duration-200"
+                  >
+                    <span className="flex items-center gap-1">
+                      <span className="text-emerald-600">✓</span> {mod.concepto} (+Bs. {mod.precio})
+                    </span>
+                    <span className="text-[8px] bg-emerald-400 text-black px-1.5 py-0.5 rounded border border-black font-black">
+                      Aprobado
+                    </span>
+                  </div>
+                );
+              }
+              
+              if (status === 'rechazado') {
+                return (
+                  <div
+                    key={mod.id}
+                    className="flex items-center justify-between text-[10px] font-black uppercase bg-rose-50 border-2 border-black px-2.5 py-1 rounded-xl shadow-[2px_2px_0px_0px_black] text-slate-400 opacity-60 animate-in fade-in duration-200"
+                  >
+                    <span className="flex items-center gap-1 line-through">
+                      <span>✗</span> {mod.concepto} (+Bs. {mod.precio})
+                    </span>
+                    <span className="text-[8px] bg-rose-200 text-rose-700 px-1.5 py-0.5 rounded border border-black font-black">
+                      Rechazado
+                    </span>
+                  </div>
+                );
+              }
+              
+              // Pendiente
+              return (
+                <div
+                  key={mod.id}
+                  className="flex items-center justify-between text-[10px] font-black uppercase bg-amber-100 border-2 border-black px-2 py-1 rounded-xl shadow-[2px_2px_0px_0px_black] text-amber-900 animate-pulse"
+                >
+                  <span className="flex items-center gap-1">
+                    <span className="text-amber-500">⚡</span> {mod.concepto} (+Bs. {mod.precio})
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onUpdateModifierStatus && onUpdateModifierStatus(mod.id, 'aprobado')}
+                      className="w-5 h-5 rounded bg-emerald-400 hover:bg-emerald-500 border border-black flex items-center justify-center shadow-[1px_1px_0px_0px_black] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer"
+                      title="Aprobar"
+                    >
+                      <span className="text-black font-extrabold text-[10px]">✓</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onUpdateModifierStatus && onUpdateModifierStatus(mod.id, 'rechazado')}
+                      className="w-5 h-5 rounded bg-rose-400 hover:bg-rose-500 border border-black flex items-center justify-center shadow-[1px_1px_0px_0px_black] active:translate-y-0.5 active:shadow-none transition-all cursor-pointer"
+                      title="Rechazar"
+                    >
+                      <span className="text-white font-extrabold text-[10px]">✗</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -139,7 +199,9 @@ GroomingCard.propTypes = {
       id: PropTypes.string,
       concepto: PropTypes.string,
       precio: PropTypes.number,
+      estado_aprobacion: PropTypes.string,
     })
   ),
   onComplete: PropTypes.func.isRequired,
+  onUpdateModifierStatus: PropTypes.func,
 };

@@ -15,7 +15,7 @@ export default function ClientApprovalModal() {
         {/* Banner de Advertencia */}
         <div className="bg-rose-500 text-white p-5 border-b-[4px] border-black flex items-center gap-3">
           <ShieldAlert size={28} strokeWidth={3} className="animate-pulse" />
-          <h3 className="font-black text-xl uppercase tracking-tighter">Tratamiento Recomendado</h3>
+          <h3 className="font-black text-xl uppercase tracking-tighter">{alertaExtra.titulo || 'Tratamiento Recomendado'}</h3>
         </div>
         
         <div className="p-6 md:p-8 overflow-y-auto max-h-[70vh] space-y-6">

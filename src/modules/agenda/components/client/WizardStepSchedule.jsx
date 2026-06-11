@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import { Clock, CalendarDays, ArrowLeft, Sun, Moon, CheckCircle2, ChevronRight, Loader2 } from 'lucide-react';
-import { getClientGroomerAppointments } from '../../services/clientAgendaService';
+import { getClientGroomerAppointments, getClientGroomerExceptions } from '../../services/clientAgendaService';
 
 // Helpers de tiempo
 const jsDayToDbDay = (jsDay) => (jsDay === 0 ? 7 : jsDay);
@@ -56,6 +56,7 @@ const WizardStepSchedule = ({
   const [viewDate, setViewDate] = useState(new Date());
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [dayAppointments, setDayAppointments] = useState([]);
+  const [dayExceptions, setDayExceptions] = useState([]);
   const [availableSlots, setAvailableSlots] = useState({ morning: [], afternoon: [] });
 
   // 1. Filtrar horarios según groomer seleccionado (o todos si es "any")
@@ -74,18 +75,28 @@ const WizardStepSchedule = ({
   useEffect(() => {
     if (!selectedDate) {
       setAvailableSlots({ morning: [], afternoon: [] });
+      setDayExceptions([]);
       return;
     }
 
     const fetchAppointments = async () => {
       setLoadingSlots(true);
       const dateStr = getISODate(selectedDate);
-      const { data, error } = await getClientGroomerAppointments(selectedGroomer, dateStr);
+      const [appRes, excRes] = await Promise.all([
+        getClientGroomerAppointments(selectedGroomer, dateStr),
+        getClientGroomerExceptions(selectedGroomer, dateStr)
+      ]);
       
-      if (!error && data) {
-        setDayAppointments(data);
+      if (!appRes.error && appRes.data) {
+        setDayAppointments(appRes.data);
       } else {
         setDayAppointments([]);
+      }
+
+      if (!excRes.error && excRes.data) {
+        setDayExceptions(excRes.data);
+      } else {
+        setDayExceptions([]);
       }
       setLoadingSlots(false);
     };
@@ -114,6 +125,16 @@ const WizardStepSchedule = ({
       
       // Filtrar citas solo del estilista de este bloque
       const groomerAppointments = dayAppointments.filter(app => app.groomer_id === block.groomer_id);
+
+      // Filtrar excepciones que aplican a este estilista (generales o específicas)
+      const groomerExceptions = dayExceptions.filter(
+        exc => exc.tipo === 'general' || (exc.tipo === 'staff' && exc.groomer_id === block.groomer_id)
+      );
+
+      // Si hay una excepción "todo el día", este bloque se descarta completamente
+      if (groomerExceptions.some(exc => exc.todo_el_dia)) {
+        return;
+      }
       
       let currentSlotMins = blockStartMins;
 
@@ -127,7 +148,20 @@ const WizardStepSchedule = ({
         const slotEndMins = currentSlotMins + grandTotalTime;
         const hasOverlap = checkOverlap(currentSlotMins, slotEndMins, groomerAppointments);
 
-        if (!hasOverlap) {
+        // Validar contra excepciones parciales
+        let hasExceptionOverlap = false;
+        for (const exc of groomerExceptions) {
+          if (!exc.todo_el_dia && exc.hora_inicio && exc.hora_fin) {
+            const excStartMins = timeToMinutes(exc.hora_inicio);
+            const excEndMins = timeToMinutes(exc.hora_fin);
+            if (currentSlotMins < excEndMins && slotEndMins > excStartMins) {
+              hasExceptionOverlap = true;
+              break;
+            }
+          }
+        }
+
+        if (!hasOverlap && !hasExceptionOverlap) {
           const slotStr = minutesToTime(currentSlotMins);
           if (currentSlotMins < 720) { // 12:00 PM
             morningSet.add(slotStr);
@@ -152,7 +186,7 @@ const WizardStepSchedule = ({
         setSelectedTime(null);
       }
     }
-  }, [selectedDate, dayAppointments, relevantSchedules, grandTotalTime, loadingSlots]);
+  }, [selectedDate, dayAppointments, dayExceptions, relevantSchedules, grandTotalTime, loadingSlots]);
 
 
   return (
